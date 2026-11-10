@@ -8,6 +8,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig(({ mode }) => {
   const single = mode === 'single'
   return {
+    // GitHub Pages pubblica il sito in /Check-case/: la base arriva da VITE_BASE nel workflow
+    base: process.env.VITE_BASE || '/',
     plugins: [
       react(),
       tailwindcss(),

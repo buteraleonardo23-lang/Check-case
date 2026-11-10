@@ -9,7 +9,7 @@ const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : Browser
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Router>
+    <Router basename={import.meta.env.VITE_ROUTER === 'memory' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '') || undefined}>
       <App />
     </Router>
   </StrictMode>,
