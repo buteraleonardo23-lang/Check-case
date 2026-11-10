@@ -4,6 +4,8 @@
 
 ## Cos'è
 
+**Dimensioni**: uno spettacolo solo, ~10 case, ~200-250 oggetti. Ogni oggetto è unico (nessuna quantità multipla).
+
 Web app (PWA installabile sulla home del telefono) per lo **smontaggio di uno spettacolo teatrale**: serve a non perdere oggetti mentre si riempiono i case. Sostituisce le liste di carta con check.
 
 Ogni case ha una lista di oggetti attesi e una **foto di riferimento** di come va riempito. Gli operatori flaggano gli oggetti man mano che li mettono dentro; gli admin vedono in tempo reale lo stato di tutti i case.
@@ -12,8 +14,8 @@ Ogni case ha una lista di oggetti attesi e una **foto di riferimento** di come v
 
 | Ruolo | Persone | Può fare |
 |---|---|---|
-| `admin` | Matteo, Leonardo | Tutto: riempire case, dashboard, gestione catalogo (case/oggetti/foto), recap, storico, chiusure forzate |
-| `operator` | Lorenzo, Rossana, Diego | Riempire case, cercare oggetti, segnalare danni |
+| `admin` | Matteo, Leonardo | Tutto: riempire case, dashboard, gestione catalogo (case/oggetti/foto), recap, storico, chiusure forzate, **punteggi** |
+| `operator` | Lorenzo, Rossana, Diego | Riempire case, mettere in un case oggetti di un altro case ("Oggetti extra"), cercare oggetti, segnalare danni. **Non** possono creare oggetti nuovi nel catalogo |
 
 Login con **username + password** (niente email visibile: internamente username → `username@checkcase.local` su Supabase Auth). Account creati solo dagli admin, nessuna registrazione pubblica.
 
@@ -45,6 +47,9 @@ Ogni oggetto ha un nome principale + **alias** (es. "scatola rossa", "box attrez
 ### Recap pre-replica
 Prima della replica successiva l'admin apre (o riceve via notifica qualche giorno prima) il recap: tutti gli oggetti 🟠 dell'ultimo smontaggio ("la scorsa volta la scatola rossa era nel case 8 invece del 9"), case chiusi forzatamente e danni aperti.
 
+### Punteggi (solo admin)
+Classifica degli operatori (chi è stato il migliore / il più veloce), calcolata dal log degli eventi. **Criteri ancora da definire con Leonardo** — non inventarli. Visibile solo a Matteo e Leonardo (RLS + UI).
+
 ### Danni
 Su ogni oggetto si può segnalare un danno: descrizione + foto opzionale. Il danno resta "aperto" finché un admin non lo segna come risolto.
 
@@ -68,7 +73,7 @@ Cerca un oggetto → mostra il case previsto (con foto) e, se c'è uno smontaggi
 ```
 
 ### Stack
-- **Frontend**: Vite + React + TypeScript + Tailwind CSS, `vite-plugin-pwa` (manifest + service worker), React Router, TanStack Query.
+- **Frontend**: Vite + React + TypeScript + Tailwind CSS, `vite-plugin-pwa` (manifest + service worker), React Router. Stato condiviso in `LoadOutProvider` (React context + Supabase Realtime).
 - **Backend**: Supabase (`@supabase/supabase-js`). Nessun server custom.
 - **Ricerca**: catalogo intero caricato in memoria (sono centinaia di oggetti, non milioni) + **Fuse.js** per ricerca fuzzy su nome/alias. Funziona anche offline.
 - **Foto**: compressione lato client (`browser-image-compression`, ~1600px, ~200 KB) prima dell'upload → il GB gratuito di Supabase basta per anni.
@@ -88,7 +93,7 @@ Tailscale richiederebbe un server sempre acceso e il client installato su ogni t
 ```
 profiles        id (= auth.users.id), username, display_name, role ('admin'|'operator'), active
 cases           id, code ("08"), name, color, photo_path, layout_photo_path, notes, sort_order, active
-items           id, name, aliases text[], expected_case_id → cases, quantity, photo_path, notes, active
+items           id, name, aliases text[], expected_case_id → cases, photo_path, notes, active
 shows           id, title, date, venue                          -- repliche (per il recap programmato)
 load_outs       id, show_id → shows, started_at, ended_at, status ('open'|'closed'), created_by
 placements      id, load_out_id, item_id, case_id, placed_by, placed_at, removed_at, removed_by
@@ -102,7 +107,8 @@ push_subscriptions  id, user_id, endpoint, keys jsonb, created_at
 
 - Lo stato verde/arancione/rosso **non si salva**: si calcola (vista SQL `load_out_item_status`) da `items.expected_case_id` + placement attivo.
 - `placements` non si cancella mai (soft delete con `removed_at`) → storico completo e "chi ha fatto cosa".
-- Oggetti extra non a catalogo: creati al volo come `items` con `expected_case_id = NULL` (da sistemare poi dall'admin).
+- Il catalogo (`cases`, `items`) è modificabile solo dagli admin.
+- Punteggi: calcolati da `placements`/`case_closures` (funzione/vista leggibile solo da admin), criteri TBD.
 
 ### Permessi (RLS)
 - `operator`: SELECT su catalogo e smontaggio corrente; INSERT/UPDATE su `placements`, `case_closures` (non forzate), `damage_reports`.
@@ -112,7 +118,7 @@ push_subscriptions  id, user_id, endpoint, keys jsonb, created_at
 
 **Operatori (e admin)**
 1. Login
-2. Lista case dello smontaggio corrente (progress bar per case: es. 12/15)
+2. **Home: carosello orizzontale dei case** (scroll da destra a sinistra, una card per case con foto, numero e progresso es. 12/15). Tap sulla card → scheda del case
 3. Dettaglio case: foto di riferimento (zoomabile), checklist con colori, sezione "Oggetti extra" + pulsante "Aggiungi oggetto qui" (ricerca), pulsante **Tutto pronto**
 4. Ricerca "Dove va?"
 5. Segnala danno
@@ -123,6 +129,7 @@ push_subscriptions  id, user_id, endpoint, keys jsonb, created_at
 8. Storico smontaggi
 9. Gestione catalogo: case, oggetti, alias, foto, utenti
 10. Danni aperti
+11. Punteggi / classifica operatori
 
 ### Notifiche push (admin)
 - Case chiuso (con eventuali 🟠)
@@ -140,7 +147,7 @@ Due strade a costo zero, da valutare dopo l'MVP:
 ## Roadmap
 
 1. **MVP**: auth + ruoli, catalogo (case/oggetti/alias/foto), smontaggio con checklist e colori, chiusura case con regole, ricerca, dashboard live.
-2. Danni, recap, storico, notifiche push, coda offline.
+2. Danni, recap, storico, notifiche push, coda offline, punteggi (dopo aver definito i criteri).
 3. QR code.
 4. Riconoscimento da foto.
 
@@ -150,3 +157,9 @@ Due strade a costo zero, da valutare dopo l'MVP:
 - Ogni modifica allo schema = nuova migration SQL, mai modifiche a mano dalla dashboard.
 - Mobile-first: pulsanti grandi, usabili con guanti e al buio; dark mode di default.
 - Variabili d'ambiente: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY` (mai committare chiavi `service_role`).
+
+## Stato attuale
+
+- Fatto: migration iniziale (schema, RLS, RPC `place_item` / `unplace_item` / `close_case` / `reopen_case` con le regole di chiusura), login, carosello case, scheda case con checklist e oggetti extra, ricerca "Dove va?", dashboard admin live, keep-alive.
+- Da fare: gestione catalogo da UI (case/oggetti/alias/foto), danni, recap, storico, notifiche push, coda offline, punteggi.
+- Le regole di dominio sono applicate **lato DB nelle RPC**, la UI le riflette soltanto: modificare prima l'SQL.

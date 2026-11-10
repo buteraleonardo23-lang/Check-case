@@ -1,0 +1,13 @@
+# Evita che Supabase (free tier) metta in pausa il progetto dopo 7 giorni di inattività.
+name: Supabase keep-alive
+on:
+  schedule:
+    - cron: '17 6 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -fsS "${{ secrets.SUPABASE_URL }}/rest/v1/cases?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" > /dev/null
