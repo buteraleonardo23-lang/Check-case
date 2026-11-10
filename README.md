@@ -11,7 +11,7 @@ PWA per lo smontaggio dello spettacolo: checklist dei case con stato verde / ara
    - SQL Editor → esegui il blocco profili in `supabase/seed_example.sql` (Matteo e Leonardo diventano admin).
    - Inserisci case e oggetti (per ora da SQL o Table Editor; la schermata di gestione catalogo arriva dopo).
 2. **Netlify** — "Import from GitHub" questo repo; imposta le variabili `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (Project Settings → API in Supabase).
-3. **GitHub** — in Settings → Secrets → Actions aggiungi `SUPABASE_URL` e `SUPABASE_ANON_KEY` per il keep-alive.
+3. **GitHub Pages** — Settings → Pages → Source: GitHub Actions. Il workflow `pages.yml` pubblica a ogni push su https://buteraleonardo23-lang.github.io/Check-case/
 4. Sul telefono apri il sito → Condividi → **Aggiungi a schermata Home**.
 
 ## Sviluppo
