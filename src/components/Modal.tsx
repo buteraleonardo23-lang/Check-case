@@ -1,13 +1,17 @@
 import type { ReactNode } from 'react'
 
-export default function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+export default function Modal({ title, eyebrow, children, onClose }: { title: string; eyebrow?: string; children: ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="w-full sm:max-w-md max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-gray-900 border border-gray-700 p-5 space-y-4"
+    <div className="fixed inset-0 z-50 bg-ink/80 backdrop-blur-sm flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div role="dialog" aria-modal="true"
+        className="rise w-full sm:max-w-md max-h-[88svh] overflow-y-auto rounded-t-[28px] sm:rounded-[28px] bg-panel border border-line px-5 pt-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] space-y-4"
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">{title}</h2>
-          <button onClick={onClose} className="text-3xl leading-none text-gray-400 px-2" aria-label="Chiudi">×</button>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+            <h2 className="title text-2xl mt-1">{title}</h2>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 rounded-full bg-panel-2 text-2xl leading-none text-muted shrink-0" aria-label="Chiudi">×</button>
         </div>
         {children}
       </div>

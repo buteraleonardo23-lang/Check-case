@@ -20,7 +20,20 @@ export interface StatusRow {
 export interface Closure {
   id: string; case_id: string; closed_by: string; closed_at: string; forced: boolean; note: string | null
 }
-export interface Activity {
-  id: string; item_id: string; case_id: string; placed_by: string
-  placed_at: string; removed_at: string | null
+export interface ActivityRow {
+  id: string; item_id: string; case_id: string; by: string; placed_at: string; removed_at: string | null
 }
+/** Riassegnazione definitiva di un oggetto a un altro case (decisa da un admin). */
+export interface ItemMove {
+  id: string; item_id: string; from_case_id: string | null; to_case_id: string
+  status: 'pending' | 'done'; note: string | null; created_at: string; created_by_name: string
+}
+
+export interface ListedItem { name: string; case_code?: string; by?: string }
+export type PlaceResult =
+  | { result: 'ok' | 'already_here' | 'case_closed' }
+  | { result: 'conflict'; case_code: string; by: string; at: string }
+export type CloseResult =
+  | { result: 'closed' | 'already_closed'; elsewhere?: ListedItem[] }
+  | { result: 'needs_confirm'; elsewhere: ListedItem[] }
+  | { result: 'blocked'; missing: ListedItem[]; elsewhere: ListedItem[] }

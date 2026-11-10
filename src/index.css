@@ -1,13 +1,50 @@
 @import "tailwindcss";
 
+/* Stile ispirato a nonservesaperlo.it: palco buio, faretto blu, Sora, accento ciano, pillole. */
+@theme {
+  --font-sans: "Sora", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-ink: #080E10;       /* fondo palco */
+  --color-night: #0B2A55;     /* faretto blu */
+  --color-panel: #0F191E;     /* superfici */
+  --color-panel-2: #152229;
+  --color-line: #22323B;
+  --color-muted: #A1A4A5;     /* testo secondario del sito */
+  --color-fog: #E8ECEE;       /* testo principale */
+  --color-accent: #0BB9EA;    /* ciano "Prenota i biglietti" */
+  --color-ok: #2BD576;
+  --color-warn: #FF9F1C;
+  --color-bad: #FF4D4D;
+}
+
 :root { color-scheme: dark; }
-html, body, #root { height: 100%; }
+html, body, #root { min-height: 100%; }
 body {
   margin: 0;
-  background: #0b0f14;
-  color: #e5e7eb;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: radial-gradient(120% 60% at 50% -10%, #0B2A55 0%, #08141F 45%, #080E10 75%) fixed, #080E10;
+  color: var(--color-fog);
+  font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
 }
+h1, h2, h3 { text-wrap: balance; }
+
+@utility eyebrow { @apply text-[11px] uppercase tracking-[0.22em] text-accent font-medium; }
+@utility title { @apply uppercase font-extrabold tracking-tight leading-[0.95]; }
+@utility btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 font-semibold transition active:scale-[0.97] disabled:opacity-40 disabled:active:scale-100; }
+@utility btn-primary { @apply btn bg-accent text-ink shadow-[0_8px_30px_-8px] shadow-accent/60; }
+@utility btn-ghost { @apply btn border border-line bg-panel/60 text-fog; }
+@utility btn-warn { @apply btn bg-warn text-ink; }
+@utility btn-bad { @apply btn bg-bad text-white; }
+@utility field { @apply w-full rounded-2xl bg-panel border border-line px-4 py-3.5 text-base text-fog placeholder:text-muted/70 outline-none focus:border-accent focus:ring-2 focus:ring-accent/30; }
+@utility glass { @apply bg-panel/70 backdrop-blur-xl border border-line; }
+@utility chip { @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium; }
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+@keyframes pop { 0% { transform: scale(.6) } 60% { transform: scale(1.15) } 100% { transform: scale(1) } }
+.pop { animation: pop .28s ease-out; }
+@keyframes rise { from { opacity: .0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+.rise { animation: rise .35s ease-out both; }
+@media (prefers-reduced-motion: reduce) { .pop, .rise { animation: none } * { transition: none !important } }

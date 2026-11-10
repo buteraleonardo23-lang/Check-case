@@ -1,70 +1,99 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
+import Ring from '../../components/Ring'
+import { useToast } from '../../components/Toast'
+import { api } from '../../lib/api'
 import { timeOf } from '../../lib/status'
-import type { Activity } from '../../lib/types'
+import type { ActivityRow } from '../../lib/types'
 import { caseProgress, useLoadOut } from '../cases/LoadOutProvider'
 
 export default function DashboardPage() {
   const lo = useLoadOut()
-  const [feed, setFeed] = useState<(Activity & { by: string })[]>([])
-  const statuses = [...lo.status.values()]
+  const toast = useToast()
+  const [feed, setFeed] = useState<ActivityRow[]>([])
+  const [confirmEnd, setConfirmEnd] = useState(false)
 
   useEffect(() => {
-    if (!lo.loadOut) return
-    supabase.from('placements')
-      .select('id, item_id, case_id, placed_by, placed_at, removed_at, profiles!placements_placed_by_fkey(display_name)')
-      .eq('load_out_id', lo.loadOut.id).order('placed_at', { ascending: false }).limit(40)
-      .then(({ data }) => setFeed((data ?? []).map((r: any) => ({ ...r, by: r.profiles?.display_name ?? '?' }))))
-  }, [lo.loadOut, lo.status])
+    if (lo.loadOut) api.activity(lo.loadOut.id).then(setFeed)
+  }, [lo.loadOut, lo.version])
 
-  if (!lo.loadOut) return <p className="p-6 text-gray-400">Nessuno smontaggio in corso.</p>
+  if (!lo.loadOut) return (
+    <div className="px-5 pt-2">
+      <p className="eyebrow">Dashboard</p>
+      <p className="text-muted mt-4">Nessuno smontaggio in corso. Avvialo dalla schermata Case.</p>
+    </div>
+  )
 
-  const red = statuses.filter(s => s.status === 'red').length
+  const statuses = [...lo.status.values()]
+  const green = statuses.filter(s => s.status === 'green').length
+  const red = statuses.filter(s => s.status === 'red')
   const orange = statuses.filter(s => s.status === 'orange')
   const closedCount = lo.cases.filter(c => lo.closures.has(c.id)).length
   const allClosed = closedCount === lo.cases.length && lo.cases.length > 0
-  const name = (id: string) => lo.items.find(i => i.id === id)?.name ?? '?'
+  const name = (id: string) => lo.itemById.get(id)?.name ?? '?'
   const code = (id: string | null) => (id && lo.caseById.get(id)?.code) || '—'
 
   return (
-    <div className="p-5 space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+    <div className="px-5 pt-2 space-y-7 pb-6">
+      <header>
+        <p className="eyebrow">Regia · live</p>
+        <h1 className="title text-5xl mt-2">Dashboard</h1>
+      </header>
 
-      {allClosed && <div className="rounded-2xl bg-green-600 p-4 text-lg font-bold text-center">✓ Tutto pronto per il carico</div>}
-
-      <div className="grid grid-cols-3 gap-3 text-center">
-        <div className="rounded-2xl bg-gray-900 p-3"><p className="text-3xl font-black">{closedCount}/{lo.cases.length}</p><p className="text-sm text-gray-400">case chiusi</p></div>
-        <div className="rounded-2xl bg-gray-900 p-3"><p className="text-3xl font-black text-orange-400">{orange.length}</p><p className="text-sm text-gray-400">altrove</p></div>
-        <div className="rounded-2xl bg-gray-900 p-3"><p className="text-3xl font-black text-red-400">{red}</p><p className="text-sm text-gray-400">mancano</p></div>
-      </div>
-
-      <section className="space-y-2">
-        {lo.cases.map(c => {
-          const p = caseProgress(c.id, lo.items, lo.status)
-          const cl = lo.closures.get(c.id)
-          return (
-            <Link key={c.id} to={`/case/${c.id}`} className="flex items-center gap-3 rounded-2xl bg-gray-900 px-4 py-3">
-              <span className="text-xl font-black w-10" style={{ color: c.color ?? undefined }}>{c.code}</span>
-              <span className="flex-1">
-                <span className="block h-2 rounded-full bg-gray-800 overflow-hidden">
-                  <span className="block h-full bg-green-500" style={{ width: `${p.total ? (p.green / p.total) * 100 : 0}%` }} />
-                </span>
-                <span className="text-xs text-gray-400">{p.green}/{p.total}{p.orange ? ` · ${p.orange} altrove` : ''}{p.red ? ` · ${p.red} mancano` : ''}</span>
+      {allClosed
+        ? <div className="rounded-3xl bg-ok text-ink p-5"><p className="eyebrow text-ink/70">Stato</p><p className="title text-3xl mt-1">Tutto pronto per il carico</p></div>
+        : (
+          <div className="rounded-3xl glass p-5 flex items-center gap-5">
+            <div className="relative shrink-0">
+              <Ring green={green} orange={orange.length} total={statuses.length} size={92} />
+              <span className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xl font-bold tabular-nums">{statuses.length ? Math.round(((green + orange.length) / statuses.length) * 100) : 0}%</span>
+                <span className="text-[9px] uppercase tracking-widest text-muted">al sicuro</span>
               </span>
-              {cl ? <span className="text-green-400 text-sm">✓ {timeOf(cl.closed_at)}{cl.forced && ' ⚠️'}</span> : <span className="text-gray-500 text-sm">aperto</span>}
-            </Link>
-          )
-        })}
+            </div>
+            <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-sm flex-1">
+              <dt className="text-muted">Case chiusi</dt><dd className="font-bold tabular-nums text-right">{closedCount}/{lo.cases.length}</dd>
+              <dt className="text-muted">Nel case giusto</dt><dd className="font-bold tabular-nums text-right text-ok">{green}</dd>
+              <dt className="text-muted">Altrove</dt><dd className="font-bold tabular-nums text-right text-warn">{orange.length}</dd>
+              <dt className="text-muted">Mancano</dt><dd className="font-bold tabular-nums text-right text-bad">{red.length}</dd>
+            </dl>
+          </div>
+        )}
+
+      <section>
+        <h2 className="eyebrow text-muted mb-3">Case</h2>
+        <div className="grid grid-cols-2 gap-2.5">
+          {lo.cases.map(c => {
+            const p = caseProgress(c.id, lo.items, lo.status)
+            const cl = lo.closures.get(c.id)
+            return (
+              <Link key={c.id} to={`/case/${c.id}`} className={`rounded-2xl border p-3.5 flex flex-col gap-2 transition active:scale-[0.97] ${cl ? 'border-ok/50 bg-ok/[0.07]' : 'border-line bg-panel'}`}>
+                <div className="flex items-baseline gap-2">
+                  <span className="title text-2xl" style={{ color: c.color ?? undefined }}>{c.code}</span>
+                  <span className="text-xs text-muted truncate">{c.name}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-line overflow-hidden flex">
+                  <span className="bg-ok" style={{ width: `${p.total ? (p.green / p.total) * 100 : 0}%` }} />
+                  <span className="bg-warn" style={{ width: `${p.total ? (p.orange / p.total) * 100 : 0}%` }} />
+                </div>
+                <span className="text-xs tabular-nums flex justify-between">
+                  <span>{p.green}/{p.total}{p.red > 0 && <span className="text-bad"> · {p.red}✕</span>}</span>
+                  {cl ? <span className="text-ok">✓ {timeOf(cl.closed_at)}{cl.forced && ' ⚠'}</span> : <span className="text-muted">aperto</span>}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
       </section>
 
       {orange.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold mb-2 text-orange-400">Nei case sbagliati</h2>
-          <ul className="space-y-1 text-sm">
+          <h2 className="eyebrow text-warn mb-3">Nel case sbagliato</h2>
+          <ul className="space-y-2">
             {orange.map(s => (
-              <li key={s.item_id} className="rounded-xl bg-gray-900 px-3 py-2">
-                <b>{s.item_name}</b>: case {code(s.actual_case_id)} invece del {code(s.expected_case_id)} · {s.placed_by_name}
+              <li key={s.item_id} className="rounded-2xl border border-warn/30 bg-warn/[0.06] px-4 py-3 text-sm">
+                <b>{s.item_name}</b>
+                <span className="block text-xs text-muted mt-0.5">Nel case {code(s.actual_case_id)} invece del {code(s.expected_case_id)} · segnato da <span className="text-fog">{s.placed_by_name}</span> alle {timeOf(s.placed_at)}</span>
               </li>
             ))}
           </ul>
@@ -72,18 +101,26 @@ export default function DashboardPage() {
       )}
 
       <section>
-        <h2 className="text-lg font-semibold mb-2">Attività</h2>
-        <ul className="space-y-1 text-sm text-gray-300">
-          {feed.map(f => (
-            <li key={f.id} className={f.removed_at ? 'line-through text-gray-500' : ''}>
-              {timeOf(f.placed_at)} · <b>{f.by}</b> → {name(f.item_id)} nel case {code(f.case_id)}
+        <h2 className="eyebrow text-muted mb-3">Attività</h2>
+        <ol className="relative border-l border-line ml-1.5 space-y-3">
+          {feed.slice(0, 15).map(f => (
+            <li key={f.id} className={`pl-4 text-sm relative ${f.removed_at ? 'text-muted line-through' : ''}`}>
+              <span className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-accent" />
+              <span className="tabular-nums text-muted text-xs">{timeOf(f.placed_at)}</span> · <b>{f.by}</b> → {name(f.item_id)} <span className="text-muted">nel {code(f.case_id)}</span>
             </li>
           ))}
-        </ul>
+        </ol>
       </section>
 
-      <button onClick={() => confirm('Chiudere lo smontaggio? Non si potranno più modificare i case.') && lo.endLoadOut().catch(e => alert(e.message))}
-        className="w-full rounded-2xl bg-gray-800 py-4">Concludi smontaggio</button>
+      {confirmEnd
+        ? <div className="rounded-2xl border border-line p-4 space-y-3">
+            <p className="text-sm">Concludere lo smontaggio? I case non si potranno più modificare.</p>
+            <div className="flex gap-2">
+              <button onClick={() => lo.endLoadOut().then(() => toast('Smontaggio concluso', 'ok')).catch(e => toast(e.message, 'bad'))} className="btn-primary flex-1">Concludi</button>
+              <button onClick={() => setConfirmEnd(false)} className="btn-ghost flex-1">Annulla</button>
+            </div>
+          </div>
+        : <button onClick={() => setConfirmEnd(true)} className="btn-ghost w-full">Concludi smontaggio</button>}
     </div>
   )
 }

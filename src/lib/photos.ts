@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
-import { supabase } from './supabase'
+import { api } from './api'
 
 const cache = new Map<string, string>()
 
-/** URL firmato (bucket privato) con cache in memoria. */
+/** URL visualizzabile per una foto (firmato su Supabase, diretto in demo). */
 export function usePhotoUrl(path: string | null | undefined) {
   const [url, setUrl] = useState<string | null>(path ? cache.get(path) ?? null : null)
   useEffect(() => {
-    if (!path || cache.has(path)) { setUrl(path ? cache.get(path)! : null); return }
+    if (!path) { setUrl(null); return }
+    if (cache.has(path)) { setUrl(cache.get(path)!); return }
     let alive = true
-    supabase.storage.from('photos').createSignedUrl(path, 60 * 60 * 12).then(({ data }) => {
-      if (data?.signedUrl) { cache.set(path, data.signedUrl); if (alive) setUrl(data.signedUrl) }
-    })
+    api.photoUrl(path).then(u => { if (u) { cache.set(path, u); if (alive) setUrl(u) } })
     return () => { alive = false }
   }, [path])
   return url

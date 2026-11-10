@@ -1,25 +1,18 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { supabase } from '../../lib/supabase'
-import type { Case, Closure, Item, LoadOut, StatusRow } from '../../lib/types'
-
-export type PlaceResult =
-  | { result: 'ok' | 'already_here' | 'case_closed' }
-  | { result: 'conflict'; case_code: string; by: string; at: string }
-
-export interface ListedItem { name: string; case_code?: string; by?: string }
-export type CloseResult =
-  | { result: 'closed' | 'already_closed'; elsewhere?: ListedItem[] }
-  | { result: 'needs_confirm'; elsewhere: ListedItem[] }
-  | { result: 'blocked'; missing: ListedItem[]; elsewhere: ListedItem[] }
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { api } from '../../lib/api'
+import type { Case, CloseResult, Closure, Item, ItemMove, LoadOut, PlaceResult, StatusRow } from '../../lib/types'
 
 interface LoadOutCtx {
   loading: boolean
   loadOut: LoadOut | null
   cases: Case[]
   items: Item[]
+  moves: ItemMove[]
   status: Map<string, StatusRow>        // item_id → stato
   closures: Map<string, Closure>        // case_id → chiusura attiva
   caseById: Map<string, Case>
+  itemById: Map<string, Item>
+  version: number                       // cresce a ogni modifica (per ricaricare feed ecc.)
   refresh: () => Promise<void>
   startLoadOut: () => Promise<void>
   endLoadOut: () => Promise<void>
@@ -36,90 +29,57 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
   const [loadOut, setLoadOut] = useState<LoadOut | null>(null)
   const [cases, setCases] = useState<Case[]>([])
   const [items, setItems] = useState<Item[]>([])
+  const [moves, setMoves] = useState<ItemMove[]>([])
   const [statusRows, setStatusRows] = useState<StatusRow[]>([])
   const [closureRows, setClosureRows] = useState<Closure[]>([])
-
-  const loadCatalog = useCallback(async () => {
-    const [c, i, lo] = await Promise.all([
-      supabase.from('cases').select('*').eq('active', true).order('sort_order').order('code'),
-      supabase.from('items').select('id, name, aliases, expected_case_id, photo_path, notes').eq('active', true).order('name'),
-      supabase.from('load_outs').select('id, started_at, status').eq('status', 'open').maybeSingle(),
-    ])
-    setCases((c.data ?? []) as Case[])
-    setItems((i.data ?? []) as Item[])
-    setLoadOut((lo.data ?? null) as LoadOut | null)
-    return (lo.data ?? null) as LoadOut | null
-  }, [])
-
-  const loadState = useCallback(async (lo: LoadOut | null) => {
-    if (!lo) { setStatusRows([]); setClosureRows([]); return }
-    const [s, cl] = await Promise.all([
-      supabase.from('load_out_item_status').select('*').eq('load_out_id', lo.id),
-      supabase.from('case_closures').select('*').eq('load_out_id', lo.id).is('reopened_at', null),
-    ])
-    setStatusRows((s.data ?? []) as StatusRow[])
-    setClosureRows((cl.data ?? []) as Closure[])
-  }, [])
+  const [version, setVersion] = useState(0)
+  const loRef = useRef<LoadOut | null>(null)
 
   const refresh = useCallback(async () => {
-    const lo = await loadCatalog()
-    await loadState(lo)
+    const cat = await api.loadCatalog()
+    setCases(cat.cases); setItems(cat.items); setMoves(cat.moves); setLoadOut(cat.loadOut)
+    loRef.current = cat.loadOut
+    if (cat.loadOut) {
+      const st = await api.loadState(cat.loadOut.id)
+      setStatusRows(st.status); setClosureRows(st.closures)
+    } else { setStatusRows([]); setClosureRows([]) }
+    setVersion(v => v + 1)
     setLoading(false)
-  }, [loadCatalog, loadState])
+  }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Realtime: qualsiasi modifica di placements/chiusure → ricarico lo stato
+  // Tempo reale: qualsiasi modifica di un collega → ricarico (con piccolo debounce)
   useEffect(() => {
     if (!loadOut) return
     let timer: ReturnType<typeof setTimeout> | undefined
-    const reload = () => { clearTimeout(timer); timer = setTimeout(() => loadState(loadOut), 150) }
-    const filter = `load_out_id=eq.${loadOut.id}`
-    const ch = supabase.channel(`lo-${loadOut.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'placements', filter }, reload)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_closures', filter }, reload)
-      .subscribe()
-    // al ritorno in primo piano (telefono in tasca) riallineo
+    const reload = () => { clearTimeout(timer); timer = setTimeout(refresh, 120) }
+    const off = api.subscribe(loadOut.id, reload)
     const onVisible = () => document.visibilityState === 'visible' && reload()
     document.addEventListener('visibilitychange', onVisible)
-    return () => { clearTimeout(timer); supabase.removeChannel(ch); document.removeEventListener('visibilitychange', onVisible) }
-  }, [loadOut, loadState])
+    return () => { clearTimeout(timer); off(); document.removeEventListener('visibilitychange', onVisible) }
+  }, [loadOut?.id, refresh])
 
-  const rpc = async <T,>(fn: string, args: Record<string, unknown>) => {
-    const { data, error } = await supabase.rpc(fn, args)
-    if (error) throw new Error(error.message)
-    await loadState(loadOut)
-    return data as T
+  const after = async <T,>(p: Promise<T>) => { const r = await p; await refresh(); return r }
+  const loId = () => {
+    if (!loRef.current) throw new Error('Nessuno smontaggio in corso')
+    return loRef.current.id
   }
 
   const value = useMemo<LoadOutCtx>(() => ({
-    loading, loadOut, cases, items,
+    loading, loadOut, cases, items, moves, version,
     status: new Map(statusRows.map(r => [r.item_id, r])),
     closures: new Map(closureRows.map(r => [r.case_id, r])),
     caseById: new Map(cases.map(c => [c.id, c])),
+    itemById: new Map(items.map(i => [i.id, i])),
     refresh,
-    startLoadOut: async () => {
-      const { data: u } = await supabase.auth.getUser()
-      const { error } = await supabase.from('load_outs').insert({ created_by: u.user?.id })
-      if (error) throw new Error(error.message)
-      await refresh()
-    },
-    endLoadOut: async () => {
-      if (!loadOut) return
-      const { error } = await supabase.from('load_outs')
-        .update({ status: 'closed', ended_at: new Date().toISOString() }).eq('id', loadOut.id)
-      if (error) throw new Error(error.message)
-      await refresh()
-    },
-    place: (itemId, caseId, move = false) =>
-      rpc<PlaceResult>('place_item', { p_load_out: loadOut!.id, p_item: itemId, p_case: caseId, p_move: move }),
-    unplace: (itemId) => rpc<void>('unplace_item', { p_load_out: loadOut!.id, p_item: itemId }),
-    closeCase: (caseId, o = {}) => rpc<CloseResult>('close_case', {
-      p_load_out: loadOut!.id, p_case: caseId,
-      p_confirm: o.confirm ?? false, p_force: o.force ?? false, p_note: o.note ?? null,
-    }),
-    reopenCase: (caseId) => rpc<void>('reopen_case', { p_load_out: loadOut!.id, p_case: caseId }),
-  }), [loading, loadOut, cases, items, statusRows, closureRows, refresh])
+    startLoadOut: () => after(api.startLoadOut()),
+    endLoadOut: () => after(api.endLoadOut(loId())),
+    place: (itemId, caseId, move = false) => after(api.place(loId(), itemId, caseId, move)),
+    unplace: (itemId) => after(api.unplace(loId(), itemId)),
+    closeCase: (caseId, o = {}) => after(api.closeCase(loId(), caseId, o)),
+    reopenCase: (caseId) => after(api.reopenCase(loId(), caseId)),
+  }), [loading, loadOut, cases, items, moves, version, statusRows, closureRows, refresh])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
