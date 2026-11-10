@@ -50,6 +50,12 @@ Prima della replica successiva l'admin apre (o riceve via notifica qualche giorn
 ### Punteggi (solo admin)
 Classifica degli operatori (chi è stato il migliore / il più veloce), calcolata dal log degli eventi. **Criteri ancora da definire con Leonardo** — non inventarli. Visibile solo a Matteo e Leonardo (RLS + UI).
 
+### Spostamento definitivo di un oggetto (solo admin)
+Dal Catalogo un admin può riassegnare un oggetto a un altro case. Il case previsto cambia **subito**; l'admin sceglie:
+- **È già lì** → spostamento `done`.
+- **Da spostare alla prossima replica** → spostamento `pending`: compare come promemoria nelle schede dei due case e nella tab Spostamenti; diventa `done` da solo quando l'oggetto viene messo nel nuovo case (trigger DB) o a mano con "Fatto".
+Tabella `item_moves`, RPC `move_item` / `complete_move` (migration 0002).
+
 ### Danni
 Su ogni oggetto si può segnalare un danno: descrizione + foto opzionale. Il danno resta "aperto" finché un admin non lo segna come risolto.
 
@@ -158,8 +164,34 @@ Due strade a costo zero, da valutare dopo l'MVP:
 - Mobile-first: pulsanti grandi, usabili con guanti e al buio; dark mode di default.
 - Variabili d'ambiente: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY` (mai committare chiavi `service_role`).
 
+## Stile (brand "Non serve saperlo")
+
+Ispirato a nonservesaperlo.it, lo spettacolo di Leonardo:
+- Font **Sora** (Google Fonts); titoli MAIUSCOLI extrabold, sottotitoli maiuscoli con letter-spacing ampio (`eyebrow`).
+- Fondo palco `#080E10` con faretto blu (`#0B2A55`) in alto; testo `#E8ECEE`, secondario `#A1A4A5`.
+- Accento ciano `#0BB9EA` (il bottone "Prenota i biglietti"); bottoni a **pillola**.
+- Motivo: il **palloncino blu** (`components/Balloon.tsx`).
+- Colori di stato separati dall'accento: ok `#2BD576`, warn `#FF9F1C`, bad `#FF4D4D`.
+- Token in `src/index.css` (`@theme`) e utility `eyebrow`, `title`, `btn-*`, `field`, `glass`, `chip`.
+- Niente `alert()`/`confirm()`: usare `useToast()` e conferme dentro la pagina.
+
+## Demo
+
+- `api` (`src/lib/api.ts`) è l'unico punto di accesso ai dati: `supabaseApi` in produzione, `demoApi` (in memoria, stesse regole delle RPC) se `VITE_DEMO=true` o Supabase non è configurato.
+- Dati demo in `src/demo/demoData.ts`: 10 case, 100 oggetti inventati, foto Unsplash in `src/demo/img/`.
+- `npm run build:demo` → `dist-demo/index.html`, un unico file con tutto incluso (router in memoria, niente service worker).
+- Se cambia una regola, va cambiata **sia** nell'SQL **sia** in `demoApi.ts`.
+
+## Mappa del codice (Graphify)
+
+Grafo del codice in `graphify-out/` (costruito localmente con tree-sitter, nessuna AI, nessun costo). **Prima di leggere file a tappeto, interroga il grafo:**
+- `graphify-out/GRAPH_REPORT.md` → panoramica: nodi centrali, comunità, collegamenti.
+- `graphify query "domanda"` → sottografo pertinente; `graphify explain "X"`; `graphify path "A" "B"`.
+- Dopo modifiche al codice: `graphify update .` e committa `graphify-out/` (la cache è ignorata).
+- Installazione: `pipx install graphifyy==0.9.94` (versione fissata di proposito).
+
 ## Stato attuale
 
-- Fatto: migration iniziale (schema, RLS, RPC `place_item` / `unplace_item` / `close_case` / `reopen_case` con le regole di chiusura), login, carosello case, scheda case con checklist e oggetti extra, ricerca "Dove va?", dashboard admin live, keep-alive.
-- Da fare: gestione catalogo da UI (case/oggetti/alias/foto), danni, recap, storico, notifiche push, coda offline, punteggi.
+- Fatto: schema + RLS + RPC (placement, chiusura con regole, spostamenti), login, carosello case, scheda case con checklist, oggetti extra e promemoria spostamenti, ricerca "Dove va?", dashboard live, catalogo admin (nuovi case/oggetti, foto, alias, spostamenti), demo, keep-alive.
+- Da fare: danni, recap, storico, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case.
 - Le regole di dominio sono applicate **lato DB nelle RPC**, la UI le riflette soltanto: modificare prima l'SQL.

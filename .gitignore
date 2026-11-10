@@ -5,3 +5,4 @@ dist
 *.log
 *.tsbuildinfo
 dist-demo
+graphify-out/cache/
