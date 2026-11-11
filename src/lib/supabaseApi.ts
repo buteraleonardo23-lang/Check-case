@@ -51,14 +51,12 @@ export const supabaseApi: Api = {
     ])
     return { status: (s.data ?? []) as StatusRow[], closures: (cl.data ?? []) as Closure[] }
   },
-  subscribe(loadOutId, onChange) {
-    const filter = `load_out_id=eq.${loadOutId}`
-    const ch = supabase.channel(`lo-${loadOutId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'placements', filter }, onChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'case_closures', filter }, onChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'item_moves' }, onChange)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'load_out_issues' }, onChange)
-      .subscribe()
+  subscribe(onChange, onStatus) {
+    // un solo canale per tutte le tabelle che cambiano lo stato visto dagli altri telefoni
+    const tables = ['load_outs', 'placements', 'case_closures', 'item_moves', 'load_out_issues', 'cases', 'items']
+    let ch = supabase.channel(`checkcase-${Math.random().toString(36).slice(2)}`)
+    for (const table of tables) ch = ch.on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
+    ch.subscribe(status => onStatus?.(status === 'SUBSCRIBED'))
     return () => { supabase.removeChannel(ch) }
   },
   async startLoadOut() {

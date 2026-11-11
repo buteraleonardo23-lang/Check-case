@@ -93,6 +93,7 @@ Cerca un oggetto → mostra il case previsto (con foto) e, se c'è uno smontaggi
 
 ### Stack
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS, `vite-plugin-pwa` (manifest + service worker), React Router. Stato condiviso in `LoadOutProvider` (React context + Supabase Realtime).
+- **Tempo reale sempre attivo**: `api.subscribe` ascolta TUTTE le tabelle (load_outs, placements, case_closures, item_moves, load_out_issues, cases, items) anche senza smontaggio in corso; rete di sicurezza: ricontrollo ogni 5 s se il realtime è giù (30 s se è su) e al ritorno in primo piano/rete. Le tabelle devono stare nella publication `supabase_realtime` (migration 0004). Nella demo il "tempo reale" passa tra schede del browser (evento `storage`, utente per scheda in sessionStorage).
 - **Backend**: Supabase (`@supabase/supabase-js`). Nessun server custom.
 - **Ricerca**: catalogo intero caricato in memoria (sono centinaia di oggetti, non milioni) + **Fuse.js** per ricerca fuzzy su nome/alias. Funziona anche offline.
 - **Foto**: compressione lato client (`browser-image-compression`, ~1600px, ~200 KB) prima dell'upload → il GB gratuito di Supabase basta per anni.

@@ -58,16 +58,30 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { refresh() }, [refresh])
 
-  // Tempo reale: qualsiasi modifica di un collega → ricarico (con piccolo debounce)
+  // Tempo reale, SEMPRE attivo (anche prima che l'admin avvii lo smontaggio):
+  // qualsiasi modifica di un collega → ricarico (con piccolo debounce).
+  // Rete di sicurezza: se il tempo reale cade (segnale scarso in teatro) ricontrollo ogni 5 s,
+  // altrimenti ogni 30 s; e sempre quando l'app torna in primo piano o torna la rete.
+  const [live, setLive] = useState(false)
   useEffect(() => {
-    if (!loadOut) return
     let timer: ReturnType<typeof setTimeout> | undefined
-    const reload = () => { clearTimeout(timer); timer = setTimeout(refresh, 120) }
-    const off = api.subscribe(loadOut.id, reload)
+    const reload = () => { clearTimeout(timer); timer = setTimeout(refresh, 150) }
+    const off = api.subscribe(reload, ok => { setLive(ok); if (ok) reload() })
     const onVisible = () => document.visibilityState === 'visible' && reload()
     document.addEventListener('visibilitychange', onVisible)
-    return () => { clearTimeout(timer); off(); document.removeEventListener('visibilitychange', onVisible) }
-  }, [loadOut?.id, refresh])
+    window.addEventListener('online', reload)
+    window.addEventListener('focus', reload)
+    return () => {
+      clearTimeout(timer); off()
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', reload)
+      window.removeEventListener('focus', reload)
+    }
+  }, [refresh])
+  useEffect(() => {
+    const id = setInterval(() => { if (document.visibilityState === 'visible') refresh() }, live ? 30_000 : 5_000)
+    return () => clearInterval(id)
+  }, [live, refresh])
 
   const after = async <T,>(p: Promise<T>) => { const r = await p; await refresh(); return r }
   const loId = () => {

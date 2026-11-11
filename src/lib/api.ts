@@ -18,7 +18,9 @@ export interface Api {
   // smontaggio
   loadCatalog(): Promise<{ cases: Case[]; items: Item[]; loadOut: LoadOut | null; moves: ItemMove[] }>
   loadState(loadOutId: string): Promise<{ status: StatusRow[]; closures: Closure[] }>
-  subscribe(loadOutId: string, onChange: () => void): () => void
+  /** Ascolta SEMPRE le modifiche dei colleghi (anche senza smontaggio in corso).
+   *  onStatus(true/false) dice se la connessione in tempo reale è attiva. */
+  subscribe(onChange: () => void, onStatus?: (live: boolean) => void): () => void
   startLoadOut(): Promise<void>
   /** Riepilogo prima di concludere (oggetti nel case sbagliato, non trovati, case aperti). */
   loadOutSummary(loadOutId: string): Promise<LoadOutSummary>

@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "src/demo/demoApi.ts": {
-    "mtime": 1794355437.196547,
-    "seen": 1794355733.0812986,
-    "ast_hash": "42e2f417b9171a6e4822158b10f55285",
+    "mtime": 1794357139.8616672,
+    "seen": 1794357197.1838498,
+    "ast_hash": "22b7a9a45b018edd0ee083a30db2b784",
     "semantic_hash": ""
   },
   "src/demo/demoData.ts": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "src/features/cases/LoadOutProvider.tsx": {
-    "mtime": 1794355450.7216039,
-    "seen": 1794355733.081401,
-    "ast_hash": "2c4c0e776628632f42b4b223ee7b32c5",
+    "mtime": 1794357117.1983109,
+    "seen": 1794357197.184088,
+    "ast_hash": "f9d44d46860b4db6b9168db9ac6b176f",
     "semantic_hash": ""
   },
   "src/features/dashboard/DashboardPage.tsx": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "src/lib/api.ts": {
-    "mtime": 1794355362.6992204,
-    "seen": 1794355733.081454,
-    "ast_hash": "1dd0b42e9baa4cb78791d21989df7da7",
+    "mtime": 1794357117.195155,
+    "seen": 1794357197.1843019,
+    "ast_hash": "0786da64c6987b219569d7ba70f0bf27",
     "semantic_hash": ""
   },
   "src/lib/photos.ts": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "src/lib/supabaseApi.ts": {
-    "mtime": 1794355371.8256278,
-    "seen": 1794355733.0815196,
-    "ast_hash": "039beedab63a4b16823dda36c4f8020b",
+    "mtime": 1794357117.1967216,
+    "seen": 1794357197.1844242,
+    "ast_hash": "3b14dccb6b19637031be71c9e91c78a2",
     "semantic_hash": ""
   },
   "src/lib/types.ts": {
@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "vite.config.ts": {
-    "mtime": 1794353893.4344292,
-    "seen": 1794355733.081527,
-    "ast_hash": "ea12ca4cf77978c0ef367fdfc0c24497",
+    "mtime": 1794356667.4314847,
+    "seen": 1794357197.1845994,
+    "ast_hash": "92003538f39cf2f125275cd70bdf07ad",
     "semantic_hash": ""
   },
   ".github/workflows/keepalive.yml": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794355730.6966448,
-    "seen": 1794355733.081531,
-    "ast_hash": "ea391c9d67d4fce6f0212f1e07cd3ac6",
+    "mtime": 1794357194.3989594,
+    "seen": 1794357197.1846733,
+    "ast_hash": "efdbd9bb06e126b01bcfd614a2e135db",
     "semantic_hash": ""
   },
   "README.md": {
@@ -180,15 +180,9 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1794353893.434843,
-    "seen": 1794355733.0815334,
-    "ast_hash": "fb918ace09cbb6f8c42af894ad65f19a",
-    "semantic_hash": ""
-  },
-  "public/icon.svg": {
-    "mtime": 1794351400.0943918,
-    "seen": 1794352446.738351,
-    "ast_hash": "877b24fc38586092e1bbe7783d7280da",
+    "mtime": 1794356667.4310644,
+    "seen": 1794357197.1847034,
+    "ast_hash": "fb43a055d9de0c5f670367613957e6f0",
     "semantic_hash": ""
   },
   "src/demo/img/p1.jpg": {
@@ -357,6 +351,42 @@
     "mtime": 1794353893.4420195,
     "seen": 1794355733.0815296,
     "ast_hash": "ba270656373b1cf9fd10080a8d403537",
+    "semantic_hash": ""
+  },
+  "public/icons/apple-touch-icon.png": {
+    "mtime": 1794356648.7608562,
+    "seen": 1794357197.1847064,
+    "ast_hash": "9b76e780985e6f4f653ae8aa70ed6659",
+    "semantic_hash": ""
+  },
+  "public/icons/favicon-32.png": {
+    "mtime": 1794356649.0700915,
+    "seen": 1794357197.1847088,
+    "ast_hash": "75cb7e488b625b677e637295c62d8075",
+    "semantic_hash": ""
+  },
+  "public/icons/favicon-48.png": {
+    "mtime": 1794356648.9033334,
+    "seen": 1794357197.184711,
+    "ast_hash": "fa0cea1cebc113dfa61265c7b668b4ff",
+    "semantic_hash": ""
+  },
+  "public/icons/icon-192.png": {
+    "mtime": 1794356648.3928561,
+    "seen": 1794357197.1847126,
+    "ast_hash": "d81c7bb0686cd6f9bf408192641948ca",
+    "semantic_hash": ""
+  },
+  "public/icons/icon-512.png": {
+    "mtime": 1794356648.228856,
+    "seen": 1794357197.1847148,
+    "ast_hash": "1557dbde7d91b668e27433df76690f53",
+    "semantic_hash": ""
+  },
+  "public/icons/maskable-512.png": {
+    "mtime": 1794356648.604856,
+    "seen": 1794357197.1847167,
+    "ast_hash": "30867d3a198322b1c1ad137a59ba9c82",
     "semantic_hash": ""
   }
 }

@@ -4,8 +4,9 @@
   "2": "Check-case — CLAUDE.md",
   "3": "demoApi.ts",
   "4": "package.json",
-  "5": "CatalogPage.tsx",
+  "5": "LogPage.tsx",
   "6": "gen-setup-sql.mjs",
   "7": "compilerOptions",
-  "8": "run.sh"
+  "8": "run.sh",
+  "9": "App.tsx"
 }

@@ -163,11 +163,32 @@ function load(): Db {
   return seed()
 }
 
+// L'utente è per scheda (sessionStorage): così due schede = due telefoni con utenti diversi.
+const USER_KEY = 'checkcase-demo-user'
+const tabUser = () => { try { return sessionStorage.getItem(USER_KEY) } catch { return null } }
 db = load()
+db.userId = tabUser()
 
 function commit() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* quota o storage bloccato: resta in memoria */ }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(db))
+    if (db.userId) sessionStorage.setItem(USER_KEY, db.userId); else sessionStorage.removeItem(USER_KEY)
+  } catch { /* quota o storage bloccato: resta in memoria */ }
   listeners.forEach(l => l())
+}
+
+// "Tempo reale" della demo: una modifica fatta in un'altra scheda arriva qui come su un altro telefono.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => {
+    if (e.key !== KEY || !e.newValue) return
+    try {
+      const mine = db.userId
+      db = JSON.parse(e.newValue) as Db
+      db.userId = mine
+      logSeq = Math.max(0, ...db.log.map(l => l.id)) + 1
+      listeners.forEach(l => l())
+    } catch { /* dato illeggibile: ignoro */ }
+  })
 }
 
 export function resetDemo() {
@@ -202,7 +223,7 @@ export const demoApi: Api = {
   async loadState(loId) {
     return { status: statusRows(loId), closures: db.closures.filter(c => c.load_out_id === loId && !c.reopened_at) }
   },
-  subscribe(_lo, cb) { listeners.add(cb); return () => { listeners.delete(cb) } },
+  subscribe(cb, onStatus) { listeners.add(cb); onStatus?.(true); return () => { listeners.delete(cb) } },
   async startLoadOut() {
     requireAdmin('Solo un admin può iniziare lo smontaggio')
     if (openLo()) throw new Error('C\'è già uno smontaggio in corso')
