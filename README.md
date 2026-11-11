@@ -14,10 +14,15 @@ PWA per lo smontaggio dello spettacolo: checklist dei case con stato verde / ara
 3. **GitHub Pages** — Settings → Pages → Source: GitHub Actions. Il workflow `pages.yml` pubblica a ogni push su https://buteraleonardo23-lang.github.io/Check-case/
 4. Sul telefono apri il sito → Condividi → **Aggiungi a schermata Home**.
 
+## Aggiornare il database (progetto già esistente)
+
+Quando arriva una nuova migration in `supabase/migrations/`, aprila su GitHub, copia tutto, incollala nello SQL Editor di Supabase e premi Run. Le migration si possono rilanciare senza danni.
+
 ## Sviluppo
 
 ```bash
 cp .env.example .env.local   # e compila
 npm install
 npm run dev
+npm test          # scenario completo sulla demo
 ```

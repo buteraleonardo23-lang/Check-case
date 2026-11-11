@@ -9,6 +9,8 @@ import CaseCarousel from './features/cases/CaseCarousel'
 import CaseDetail from './features/cases/CaseDetail'
 import { LoadOutProvider } from './features/cases/LoadOutProvider'
 import DashboardPage from './features/dashboard/DashboardPage'
+import FixPage from './features/fix/FixPage'
+import LogPage from './features/log/LogPage'
 import SearchPage from './features/search/SearchPage'
 
 function AdminOnly({ children }: { children: ReactNode }) {
@@ -28,6 +30,8 @@ function Gate() {
           <Route path="cerca" element={<SearchPage />} />
           <Route path="dashboard" element={<AdminOnly><DashboardPage /></AdminOnly>} />
           <Route path="catalogo" element={<AdminOnly><CatalogPage /></AdminOnly>} />
+          <Route path="da-sistemare" element={<AdminOnly><FixPage /></AdminOnly>} />
+          <Route path="registro" element={<AdminOnly><LogPage /></AdminOnly>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

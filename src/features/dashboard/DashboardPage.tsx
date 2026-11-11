@@ -1,26 +1,50 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import Modal from '../../components/Modal'
 import Ring from '../../components/Ring'
 import { useToast } from '../../components/Toast'
 import { api } from '../../lib/api'
 import { timeOf } from '../../lib/status'
-import type { ActivityRow } from '../../lib/types'
+import type { ActivityRow, LoadOutSummary } from '../../lib/types'
+import AdminNotices from '../fix/AdminNotices'
 import { caseProgress, useLoadOut } from '../cases/LoadOutProvider'
 
 export default function DashboardPage() {
   const lo = useLoadOut()
   const toast = useToast()
   const [feed, setFeed] = useState<ActivityRow[]>([])
-  const [confirmEnd, setConfirmEnd] = useState(false)
+  const navigate = useNavigate()
+  const [summary, setSummary] = useState<LoadOutSummary | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const askEnd = async () => {
+    setBusy(true)
+    try { setSummary(await lo.loadOutSummary()) } catch (e) { toast((e as Error).message, 'bad') }
+    setBusy(false)
+  }
+  const confirmEnd = async () => {
+    setBusy(true)
+    try {
+      const s = await lo.endLoadOut()
+      setSummary(null)
+      toast('Smontaggio concluso', 'ok')
+      navigate(s.misplaced.length || s.missing.length ? '/da-sistemare' : '/')
+    } catch (e) { toast((e as Error).message, 'bad') }
+    setBusy(false)
+  }
 
   useEffect(() => {
     if (lo.loadOut) api.activity(lo.loadOut.id).then(setFeed)
   }, [lo.loadOut, lo.version])
 
   if (!lo.loadOut) return (
-    <div className="px-5 pt-2">
-      <p className="eyebrow">Dashboard</p>
-      <p className="text-muted mt-4">Nessuno smontaggio in corso. Avvialo dalla schermata Case.</p>
+    <div className="pt-2 space-y-4">
+      <header className="px-5 flex items-end justify-between">
+        <div><p className="eyebrow">Regia</p><h1 className="title text-5xl mt-2">Dashboard</h1></div>
+        <Link to="/registro" className="btn-ghost px-4 py-2 text-sm">Registro</Link>
+      </header>
+      <AdminNotices />
+      <p className="px-5 text-muted">Nessuno smontaggio in corso. Avvialo dalla schermata Case.</p>
     </div>
   )
 
@@ -35,10 +59,14 @@ export default function DashboardPage() {
 
   return (
     <div className="px-5 pt-2 space-y-7 pb-6">
-      <header>
-        <p className="eyebrow">Regia · live</p>
-        <h1 className="title text-5xl mt-2">Dashboard</h1>
+      <header className="flex items-end justify-between gap-3">
+        <div>
+          <p className="eyebrow">Regia · live</p>
+          <h1 className="title text-5xl mt-2">Dashboard</h1>
+        </div>
+        <Link to="/registro" className="btn-ghost px-4 py-2 text-sm shrink-0">Registro</Link>
       </header>
+      <div className="-mx-5"><AdminNotices /></div>
 
       {allClosed
         ? <div className="rounded-3xl bg-ok text-ink p-5"><p className="eyebrow text-ink/70">Stato</p><p className="title text-3xl mt-1">Tutto pronto per il carico</p></div>
@@ -112,15 +140,45 @@ export default function DashboardPage() {
         </ol>
       </section>
 
-      {confirmEnd
-        ? <div className="rounded-2xl border border-line p-4 space-y-3">
-            <p className="text-sm">Concludere lo smontaggio? I case non si potranno più modificare.</p>
-            <div className="flex gap-2">
-              <button onClick={() => lo.endLoadOut().then(() => toast('Smontaggio concluso', 'ok')).catch(e => toast(e.message, 'bad'))} className="btn-primary flex-1">Concludi</button>
-              <button onClick={() => setConfirmEnd(false)} className="btn-ghost flex-1">Annulla</button>
+      <button disabled={busy} onClick={askEnd} className="btn-ghost w-full">Concludi smontaggio…</button>
+
+      {summary && (() => {
+        const byCase = new Map<string, string[]>()
+        for (const m of summary.missing) byCase.set(m.expected_code ?? '—', [...(byCase.get(m.expected_code ?? '—') ?? []), m.name])
+        const clean = !summary.misplaced.length && !summary.missing.length
+        return (
+          <Modal eyebrow="Prima di concludere" title={clean ? 'Tutto a posto' : 'Occhio'} onClose={() => setSummary(null)}>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-2xl bg-panel-2 p-3"><p className="text-2xl font-bold tabular-nums">{summary.placed}<span className="text-sm text-muted">/{summary.total}</span></p><p className="text-[10px] uppercase tracking-widest text-muted">nei case</p></div>
+              <div className="rounded-2xl bg-warn/10 p-3"><p className="text-2xl font-bold tabular-nums text-warn">{summary.misplaced.length}</p><p className="text-[10px] uppercase tracking-widest text-muted">case sbagliato</p></div>
+              <div className="rounded-2xl bg-bad/10 p-3"><p className="text-2xl font-bold tabular-nums text-bad">{summary.missing.length}</p><p className="text-[10px] uppercase tracking-widest text-muted">non trovati</p></div>
             </div>
-          </div>
-        : <button onClick={() => setConfirmEnd(true)} className="btn-ghost w-full">Concludi smontaggio</button>}
+
+            {summary.misplaced.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="eyebrow text-warn">Nel case sbagliato</p>
+                {summary.misplaced.map(m => (
+                  <p key={m.item_id} className="text-sm"><b>{m.name}</b> <span className="text-muted">nel {m.actual_code} invece del {m.expected_code ?? '—'}{m.by && ` · ${m.by}`}</span></p>
+                ))}
+              </div>
+            )}
+            {summary.missing.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="eyebrow text-bad">Non trovati (persi o non segnati)</p>
+                {[...byCase.entries()].map(([code, names]) => (
+                  <p key={code} className="text-sm"><b className="tabular-nums">Case {code}</b> <span className="text-muted">· {names.length > 6 ? `${names.slice(0, 6).join(', ')} e altri ${names.length - 6}` : names.join(', ')}</span></p>
+                ))}
+              </div>
+            )}
+            {summary.open_cases.length > 0 && (
+              <p className="text-sm rounded-2xl border border-line p-3">Case ancora aperti: <b>{summary.open_cases.join(', ')}</b></p>
+            )}
+            {!clean && <p className="text-sm text-muted">Confermando, questi oggetti finiscono in <b className="text-fog">Da sistemare</b>: ti resta un promemoria finché non li risolvi, e puoi chiedere ai ragazzi se li hanno visti.</p>}
+            <button disabled={busy} onClick={confirmEnd} className="btn-primary w-full">Confermo, concludi smontaggio</button>
+            <button onClick={() => setSummary(null)} className="btn-ghost w-full">Annulla</button>
+          </Modal>
+        )
+      })()}
     </div>
   )
 }

@@ -7,6 +7,7 @@ import type { Case } from '../../lib/types'
 import { useToast } from '../../components/Toast'
 import { useAuth } from '../auth/AuthProvider'
 import { caseProgress, useLoadOut } from './LoadOutProvider'
+import AdminNotices from '../fix/AdminNotices'
 
 function CaseCard({ c, focus }: { c: Case; focus: number }) {
   const { items, status, closures, moves } = useLoadOut()
@@ -86,12 +87,15 @@ export default function CaseCarousel() {
   if (loading) return <p className="p-6 text-muted">Caricamento…</p>
 
   if (!loadOut) return (
-    <div className="px-6 pt-24 text-center space-y-5 rise">
+    <div className="pt-4">
+    <AdminNotices />
+    <div className="px-6 pt-16 text-center space-y-5 rise">
       <p className="eyebrow">Nessuno smontaggio in corso</p>
       <h1 className="title text-4xl">Pronti a<br />smontare?</h1>
       {isAdmin
         ? <button onClick={() => startLoadOut().catch(e => toast(e.message, 'bad'))} className="btn-primary">Inizia smontaggio</button>
-        : <p className="text-muted">Aspetta che Matteo o Leonardo lo avviino.</p>}
+        : <p className="text-muted">Aspetta che un admin lo avvii.</p>}
+    </div>
     </div>
   )
 
@@ -112,6 +116,7 @@ export default function CaseCarousel() {
         </div>
       </header>
 
+      <AdminNotices />
       <div ref={scroller} className="relative flex gap-1 overflow-x-auto snap-x snap-mandatory no-scrollbar px-[max(11vw,calc(50vw-180px))] py-2">
         {cases.map((c, i) => <CaseCard key={c.id} c={c} focus={focus[i] ?? (i === 0 ? 1 : 0)} />)}
       </div>

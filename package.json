@@ -8,7 +8,10 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "build:demo": "vite build --mode single",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "test": "node scripts/test-demo.mjs",
+    "test:db": "supabase/tests/run.sh",
+    "gen:setup": "node --experimental-strip-types --no-warnings scripts/gen-setup-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

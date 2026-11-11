@@ -1,10 +1,11 @@
 {
-  "0": "CaseDetail.tsx",
-  "1": "api.ts",
+  "0": "App.tsx",
+  "1": "api",
   "2": "Check-case — CLAUDE.md",
-  "3": "demoData.ts",
+  "3": "demoApi.ts",
   "4": "package.json",
-  "5": "App.tsx",
-  "6": "api",
-  "7": "compilerOptions"
+  "5": "CatalogPage.tsx",
+  "6": "gen-setup-sql.mjs",
+  "7": "compilerOptions",
+  "8": "run.sh"
 }

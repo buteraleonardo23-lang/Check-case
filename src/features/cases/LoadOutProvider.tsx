@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../../lib/api'
-import type { Case, CloseResult, Closure, Item, ItemMove, LoadOut, PlaceResult, StatusRow } from '../../lib/types'
+import type { Case, CloseResult, Closure, IssueAction, Item, ItemMove, LoadOut, LoadOutIssue, LoadOutSummary, PlaceResult, StatusRow } from '../../lib/types'
 
 interface LoadOutCtx {
   loading: boolean
@@ -12,10 +12,15 @@ interface LoadOutCtx {
   closures: Map<string, Closure>        // case_id → chiusura attiva
   caseById: Map<string, Case>
   itemById: Map<string, Item>
+  issues: LoadOutIssue[]                // voci "da sistemare" (tutte, anche risolte)
+  openIssues: LoadOutIssue[]            // solo quelle ancora da gestire (open + lost)
+  dbOutdated: boolean                   // il database non ha ancora la migration 0003
   version: number                       // cresce a ogni modifica (per ricaricare feed ecc.)
   refresh: () => Promise<void>
   startLoadOut: () => Promise<void>
-  endLoadOut: () => Promise<void>
+  loadOutSummary: () => Promise<LoadOutSummary>
+  endLoadOut: () => Promise<LoadOutSummary>
+  resolveIssues: (ids: string[], action: IssueAction, note?: string | null) => Promise<void>
   place: (itemId: string, caseId: string, move?: boolean) => Promise<PlaceResult>
   unplace: (itemId: string) => Promise<void>
   closeCase: (caseId: string, opts?: { confirm?: boolean; force?: boolean; note?: string }) => Promise<CloseResult>
@@ -32,6 +37,8 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
   const [moves, setMoves] = useState<ItemMove[]>([])
   const [statusRows, setStatusRows] = useState<StatusRow[]>([])
   const [closureRows, setClosureRows] = useState<Closure[]>([])
+  const [issues, setIssues] = useState<LoadOutIssue[]>([])
+  const [dbOutdated, setDbOutdated] = useState(false)
   const [version, setVersion] = useState(0)
   const loRef = useRef<LoadOut | null>(null)
 
@@ -43,6 +50,8 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
       const st = await api.loadState(cat.loadOut.id)
       setStatusRows(st.status); setClosureRows(st.closures)
     } else { setStatusRows([]); setClosureRows([]) }
+    try { setIssues(await api.issues()); setDbOutdated(false) }
+    catch { setIssues([]); setDbOutdated(true) }   // migration 0003 non ancora eseguita
     setVersion(v => v + 1)
     setLoading(false)
   }, [])
@@ -67,19 +76,22 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
   }
 
   const value = useMemo<LoadOutCtx>(() => ({
-    loading, loadOut, cases, items, moves, version,
+    loading, loadOut, cases, items, moves, version, issues, dbOutdated,
+    openIssues: issues.filter(i => i.status !== 'resolved'),
     status: new Map(statusRows.map(r => [r.item_id, r])),
     closures: new Map(closureRows.map(r => [r.case_id, r])),
     caseById: new Map(cases.map(c => [c.id, c])),
     itemById: new Map(items.map(i => [i.id, i])),
     refresh,
     startLoadOut: () => after(api.startLoadOut()),
+    loadOutSummary: () => api.loadOutSummary(loId()),
     endLoadOut: () => after(api.endLoadOut(loId())),
+    resolveIssues: (ids, action, note = null) => after(api.resolveIssues(ids, action, note)),
     place: (itemId, caseId, move = false) => after(api.place(loId(), itemId, caseId, move)),
     unplace: (itemId) => after(api.unplace(loId(), itemId)),
     closeCase: (caseId, o = {}) => after(api.closeCase(loId(), caseId, o)),
     reopenCase: (caseId) => after(api.reopenCase(loId(), caseId)),
-  }), [loading, loadOut, cases, items, moves, version, statusRows, closureRows, refresh])
+  }), [loading, loadOut, cases, items, moves, version, issues, dbOutdated, statusRows, closureRows, refresh])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

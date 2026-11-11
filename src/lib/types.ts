@@ -37,3 +37,25 @@ export type CloseResult =
   | { result: 'closed' | 'already_closed'; elsewhere?: ListedItem[] }
   | { result: 'needs_confirm'; elsewhere: ListedItem[] }
   | { result: 'blocked'; missing: ListedItem[]; elsewhere: ListedItem[] }
+
+/** Riepilogo di uno smontaggio, mostrato prima di concluderlo. */
+export interface LoadOutSummary {
+  misplaced: { item_id: string; name: string; expected_code: string | null; actual_code: string; by: string | null; at: string | null }[]
+  missing: { item_id: string; name: string; expected_code: string | null }[]
+  open_cases: string[]
+  placed: number
+  total: number
+}
+
+/** Voce "da sistemare" nata alla chiusura di uno smontaggio. */
+export type IssueAction = 'fixed' | 'reassigned' | 'found' | 'lost' | 'replaced' | 'dismissed'
+export interface LoadOutIssue {
+  id: string; load_out_id: string; load_out_date: string; item_id: string
+  kind: 'misplaced' | 'missing'
+  expected_case_id: string | null; actual_case_id: string | null; placed_by_name: string | null
+  status: 'open' | 'lost' | 'resolved'; resolution: Exclude<IssueAction, 'lost'> | null
+  note: string | null; created_at: string; resolved_at: string | null
+}
+
+export interface LogRow { id: number; at: string; actor_name: string | null; action: string; message: string; load_out_id: string | null }
+export interface LoadOutInfo { id: string; started_at: string; ended_at: string | null; status: 'open' | 'closed' }

@@ -3,7 +3,6 @@ import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 import { api } from '../../lib/api'
 import { usePhotoUrl } from '../../lib/photos'
-import { dateOf } from '../../lib/status'
 import type { Case, Item } from '../../lib/types'
 import { useLoadOut } from '../cases/LoadOutProvider'
 import { useItemSearch } from '../search/useItemSearch'
@@ -183,8 +182,7 @@ function CaseRow({ c, onEdit }: { c: Case; onEdit: () => void }) {
 
 export default function CatalogPage() {
   const lo = useLoadOut()
-  const toast = useToast()
-  const [tab, setTab] = useState<'cases' | 'items' | 'moves'>('items')
+  const [tab, setTab] = useState<'cases' | 'items'>('items')
   const [editCase, setEditCase] = useState<Case | null | 'new'>(null)
   const [editItem, setEditItem] = useState<Item | null | 'new'>(null)
   const [filter, setFilter] = useState<string | null>(null)
@@ -196,7 +194,6 @@ export default function CatalogPage() {
   const tabs = [
     { k: 'items' as const, t: 'Oggetti', n: lo.items.length },
     { k: 'cases' as const, t: 'Case', n: lo.cases.length },
-    { k: 'moves' as const, t: 'Spostamenti', n: pending.length },
   ]
 
   return (
@@ -206,7 +203,7 @@ export default function CatalogPage() {
           <p className="eyebrow">Solo admin</p>
           <h1 className="title text-[40px] mt-2">Catalogo</h1>
         </div>
-        {tab !== 'moves' && (
+        {(
           <button onClick={() => tab === 'cases' ? setEditCase('new') : setEditItem('new')} className="btn-primary px-4 py-2.5 text-sm whitespace-nowrap shrink-0">
             + {tab === 'cases' ? 'Case' : 'Oggetto'}
           </button>
@@ -258,33 +255,6 @@ export default function CatalogPage() {
               )
             })}
           </ul>
-        </div>
-      )}
-
-      {tab === 'moves' && (
-        <div className="space-y-5">
-          <section className="space-y-2">
-            <h2 className="eyebrow text-muted">Da fare alla prossima replica</h2>
-            {pending.length === 0 && <p className="text-sm text-muted">Nessuno spostamento in sospeso.</p>}
-            {pending.map(m => (
-              <div key={m.id} className="rounded-2xl border border-accent/40 bg-accent/[0.06] p-4 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold">{lo.itemById.get(m.item_id)?.name}</p>
-                  <p className="text-sm"><span className="text-muted">case</span> {lo.caseById.get(m.from_case_id ?? '')?.code ?? '—'} <span className="text-accent">→</span> {lo.caseById.get(m.to_case_id)?.code}</p>
-                  <p className="text-xs text-muted">{m.created_by_name} · {dateOf(m.created_at)}{m.note && ` · ${m.note}`}</p>
-                </div>
-                <button onClick={() => api.completeMove(m.id).then(lo.refresh).then(() => toast('Segnato come fatto', 'ok'))} className="btn-ghost px-4 py-2 text-sm">Fatto</button>
-              </div>
-            ))}
-          </section>
-          <section className="space-y-2">
-            <h2 className="eyebrow text-muted">Storico</h2>
-            {lo.moves.filter(m => m.status === 'done').map(m => (
-              <p key={m.id} className="text-sm border-b border-line pb-2">
-                <b>{lo.itemById.get(m.item_id)?.name}</b> <span className="text-muted">{lo.caseById.get(m.from_case_id ?? '')?.code ?? '—'} → {lo.caseById.get(m.to_case_id)?.code} · {m.created_by_name} · {dateOf(m.created_at)}</span>
-              </p>
-            ))}
-          </section>
         </div>
       )}
 

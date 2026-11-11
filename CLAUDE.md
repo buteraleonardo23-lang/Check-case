@@ -56,6 +56,19 @@ Dal Catalogo un admin può riassegnare un oggetto a un altro case. Il case previ
 - **Da spostare alla prossima replica** → spostamento `pending`: compare come promemoria nelle schede dei due case e nella tab Spostamenti; diventa `done` da solo quando l'oggetto viene messo nel nuovo case (trigger DB) o a mano con "Fatto".
 Tabella `item_moves`, RPC `move_item` / `complete_move` (migration 0002).
 
+### Registro attività (tutto, sempre)
+Ogni azione finisce in `activity_log` tramite **trigger DB** (non dipende dall'app): messo / messo nel case sbagliato / tolto, case chiuso / forzato / riaperto, smontaggio iniziato / concluso + riepilogo, riassegnazioni, catalogo, risoluzioni. Messaggi già leggibili ("Matteo ha messo «Scatola rossa» nel case 08 (dovrebbe stare nel case 05)"). Solo admin lo leggono. Pagina **Registro** (da Dashboard) con **"Copia per Claude"**: incollato in chat serve a ricostruire cosa è successo.
+
+### Chiusura smontaggio (solo admin)
+"Concludi smontaggio" → RPC `end_load_out(p_confirm=false)` restituisce il **riepilogo** (nel case sbagliato con chi l'ha messo, non trovati per case, case ancora aperti) → l'admin conferma → `end_load_out(true)` chiude e crea le voci **Da sistemare**. Non si chiude più direttamente dalla tabella (policy).
+
+### Da sistemare (`load_out_issues`)
+Nate alla chiusura: `misplaced` (case sbagliato) e `missing` (non trovato: perso o non segnato). Banner per gli admin in home/dashboard finché ce ne sono, badge nella barra.
+- misplaced → "Rimesso nel XX" (`fixed`) o "Resta nel YY" (`reassigned`: cambia il case previsto via `move_item`).
+- missing → "Trovato" (`found`) o "Perso" (stato `lost` = da ricomprare) → "Ricomprato" (`replaced`). "Chiedi ai ragazzi" prepara il messaggio per WhatsApp. "Ignora tutti" (`dismissed`) dopo uno smontaggio di prova.
+- Si chiudono **da sole** allo smontaggio successivo: oggetto messo nel suo case → `fixed`; oggetto non trovato che ricompare → `found`.
+- Le riassegnazioni decise (`item_moves` pending) stanno nella stessa pagina.
+
 ### Danni
 Su ogni oggetto si può segnalare un danno: descrizione + foto opzionale. Il danno resta "aperto" finché un admin non lo segna come risolto.
 
@@ -68,7 +81,7 @@ Cerca un oggetto → mostra il case previsto (con foto) e, se c'è uno smontaggi
  Telefoni (PWA installata)
    │  React + Vite + TS, Service Worker, IndexedDB (coda offline)
    │
-   ├── Netlify (free)        → hosting statico + deploy da GitHub
+   ├── GitHub Pages (free)   → hosting statico + deploy automatico (workflow pages.yml)
    │
    └── Supabase (free)
          ├── Postgres + Row Level Security (permessi per ruolo)
@@ -190,8 +203,21 @@ Grafo del codice in `graphify-out/` (costruito localmente con tree-sitter, nessu
 - Dopo modifiche al codice: `graphify update .` e committa `graphify-out/` (la cache è ignorata).
 - Installazione: `pipx install graphifyy==0.9.94` (versione fissata di proposito).
 
+## Test (da lanciare dopo ogni modifica alle regole)
+
+- `npm test` → scenario completo sulla **demo** (`src/demo/demoApi.scenario.ts`, gira dentro Vite).
+- `DATABASE_URL=postgres://…vuoto npm run test:db` → stesso scenario sul **database** con RLS e utenti veri (`supabase/tests/`). In questo container: Postgres in `/var/lib/postgresql/cc-test` (la cartella scratchpad perde i permessi).
+- `supabase/tests/upgrade*.sql` → aggiornamento di un DB già in uso (applica la migration due volte).
+- `npm run gen:setup` → rigenera `supabase/setup_completo.sql` (tutte le migration + catalogo di prova) per progetti nuovi.
+
+## Produzione
+
+- Sito: **https://buteraleonardo23-lang.github.io/Check-case/** (GitHub Pages, workflow `pages.yml` a ogni push sul branch di sviluppo, che è anche il default).
+- Supabase: progetto `gbzrvzgzfrerusklmbjh`, config pubblica in `.env.production`. Le migration nuove le esegue **Leonardo a mano** nello SQL Editor (non abbiamo chiavi admin): dirgli quale file incollare.
+- Utenti: `leonardo` (admin), `matteo` (operatore per ora, solo per prova).
+
 ## Stato attuale
 
-- Fatto: schema + RLS + RPC (placement, chiusura con regole, spostamenti), login, carosello case, scheda case con checklist, oggetti extra e promemoria spostamenti, ricerca "Dove va?", dashboard live, catalogo admin (nuovi case/oggetti, foto, alias, spostamenti), demo, keep-alive.
-- Da fare: danni, recap, storico, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case.
+- Fatto: schema + RLS + RPC (placement, chiusura con regole, spostamenti), login, carosello case, scheda case con checklist, oggetti extra e promemoria spostamenti, ricerca "Dove va?", dashboard live, catalogo admin (nuovi case/oggetti, foto, alias, spostamenti), **registro attività + Copia per Claude, chiusura smontaggio con riepilogo, Da sistemare (= recap pre-replica)**, demo, test DB + demo, keep-alive, deploy GitHub Pages.
+- Da fare: danni, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case, gestione utenti da app.
 - Le regole di dominio sono applicate **lato DB nelle RPC**, la UI le riflette soltanto: modificare prima l'SQL.

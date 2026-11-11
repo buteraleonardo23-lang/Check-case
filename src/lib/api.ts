@@ -1,5 +1,6 @@
 import type {
-  ActivityRow, Case, Closure, CloseResult, Item, ItemMove, LoadOut, PlaceResult, Profile, StatusRow,
+  ActivityRow, Case, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
+  LoadOutSummary, LogRow, PlaceResult, Profile, StatusRow,
 } from './types'
 
 /**
@@ -19,12 +20,20 @@ export interface Api {
   loadState(loadOutId: string): Promise<{ status: StatusRow[]; closures: Closure[] }>
   subscribe(loadOutId: string, onChange: () => void): () => void
   startLoadOut(): Promise<void>
-  endLoadOut(loadOutId: string): Promise<void>
+  /** Riepilogo prima di concludere (oggetti nel case sbagliato, non trovati, case aperti). */
+  loadOutSummary(loadOutId: string): Promise<LoadOutSummary>
+  /** Conclude lo smontaggio (solo admin) e crea le voci "da sistemare". */
+  endLoadOut(loadOutId: string): Promise<LoadOutSummary>
   place(loadOutId: string, itemId: string, caseId: string, move: boolean): Promise<PlaceResult>
   unplace(loadOutId: string, itemId: string): Promise<void>
   closeCase(loadOutId: string, caseId: string, o: { confirm?: boolean; force?: boolean; note?: string }): Promise<CloseResult>
   reopenCase(loadOutId: string, caseId: string): Promise<void>
   activity(loadOutId: string): Promise<ActivityRow[]>
+  // da sistemare + registro
+  issues(): Promise<LoadOutIssue[]>
+  resolveIssues(issueIds: string[], action: IssueAction, note: string | null): Promise<void>
+  activityLog(loadOutId: string | null | 'all', limit?: number): Promise<LogRow[]>
+  loadOuts(): Promise<LoadOutInfo[]>
   // catalogo (solo admin)
   saveCase(c: Partial<Case> & { code: string; name: string }): Promise<void>
   saveItem(i: Partial<Item> & { name: string }): Promise<void>

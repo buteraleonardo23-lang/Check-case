@@ -1,6 +1,6 @@
 import { supabase, usernameToEmail } from './supabase'
 import type { Api } from './api'
-import type { ActivityRow, Case, Closure, Item, ItemMove, LoadOut, Profile, StatusRow } from './types'
+import type { ActivityRow, Case, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
 
 const must = <T,>({ data, error }: { data: T; error: { message: string } | null }) => {
   if (error) throw new Error(error.message)
@@ -57,6 +57,7 @@ export const supabaseApi: Api = {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'placements', filter }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'case_closures', filter }, onChange)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'item_moves' }, onChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'load_out_issues' }, onChange)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   },
@@ -64,8 +65,14 @@ export const supabaseApi: Api = {
     const { data: u } = await supabase.auth.getUser()
     must(await supabase.from('load_outs').insert({ created_by: u.user?.id }))
   },
+  async loadOutSummary(id) {
+    const r = must(await supabase.rpc('end_load_out', { p_load_out: id, p_confirm: false })) as any
+    if (r.result === 'already_closed') throw new Error('Lo smontaggio è già concluso')
+    return r.summary
+  },
   async endLoadOut(id) {
-    must(await supabase.from('load_outs').update({ status: 'closed', ended_at: new Date().toISOString() }).eq('id', id))
+    const r = must(await supabase.rpc('end_load_out', { p_load_out: id, p_confirm: true })) as any
+    return r.summary
   },
   async place(lo, item, cs, move) {
     return must(await supabase.rpc('place_item', { p_load_out: lo, p_item: item, p_case: cs, p_move: move }))
@@ -82,6 +89,32 @@ export const supabaseApi: Api = {
       .select('id, item_id, case_id, placed_at, removed_at, profiles!placements_placed_by_fkey(display_name)')
       .eq('load_out_id', lo).order('placed_at', { ascending: false }).limit(40)
     return (data ?? []).map((r: any) => ({ ...r, by: r.profiles?.display_name ?? '?' })) as ActivityRow[]
+  },
+
+  async issues() {
+    const { data, error } = await supabase.from('load_out_issues')
+      .select('*, load_outs(started_at), profiles!load_out_issues_placed_by_fkey(display_name)')
+      .order('created_at', { ascending: false }).limit(500)
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((r: any) => ({
+      ...r, load_out_date: r.load_outs?.started_at ?? r.created_at, placed_by_name: r.profiles?.display_name ?? null,
+    }))
+  },
+  async resolveIssues(ids, action, note) {
+    must(await supabase.rpc('resolve_issues', { p_issues: ids, p_action: action, p_note: note }))
+  },
+  async activityLog(loadOutId, limit = 1000) {
+    let q = supabase.from('activity_log').select('id, at, actor_name, action, message, load_out_id')
+      .order('at', { ascending: true }).order('id', { ascending: true }).limit(limit)
+    if (loadOutId === null) q = q.is('load_out_id', null)
+    else if (loadOutId !== 'all') q = q.eq('load_out_id', loadOutId)
+    const { data, error } = await q
+    if (error) throw new Error(error.message)
+    return (data ?? []) as LogRow[]
+  },
+  async loadOuts() {
+    const { data } = await supabase.from('load_outs').select('id, started_at, ended_at, status').order('started_at', { ascending: false })
+    return (data ?? []) as LoadOutInfo[]
   },
 
   async saveCase(c) {
