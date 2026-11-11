@@ -184,6 +184,7 @@ Ispirato a nonservesaperlo.it, lo spettacolo di Leonardo:
 - Fondo palco `#080E10` con faretto blu (`#0B2A55`) in alto; testo `#E8ECEE`, secondario `#A1A4A5`.
 - Accento ciano `#0BB9EA` (il bottone "Prenota i biglietti"); bottoni a **pillola**.
 - Motivo: il **palloncino blu** (`components/Balloon.tsx`).
+- **Icona dell'app / favicon**: il logo ufficiale NSS (palloncino + scritta, dal sito) su fondo palco, in `public/icons/` (192, 512, maskable 512 per Android, apple-touch 180 per iPhone, favicon 32/48).
 - Colori di stato separati dall'accento: ok `#2BD576`, warn `#FF9F1C`, bad `#FF4D4D`.
 - Token in `src/index.css` (`@theme`) e utility `eyebrow`, `title`, `btn-*`, `field`, `glass`, `chip`.
 - Niente `alert()`/`confirm()`: usare `useToast()` e conferme dentro la pagina.
