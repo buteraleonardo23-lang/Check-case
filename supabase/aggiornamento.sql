@@ -227,6 +227,9 @@ returns void language sql security definer set search_path = public as $$
          coalesce((select ended_at from load_outs where id = p_load_out), now())
   from load_out_item_status s
   where s.load_out_id = p_load_out and s.status in ('orange', 'red')
+    -- un oggetto catalogato DOPO la chiusura di quello smontaggio non può esserci stato
+    and not exists (select 1 from items it where it.id = s.item_id
+                    and it.created_at > coalesce((select ended_at from load_outs where id = p_load_out), now()))
   on conflict (load_out_id, item_id) do nothing;
 $$;
 
@@ -621,6 +624,9 @@ returns void language sql security definer set search_path = public as $$
   from load_out_item_status s
   where s.load_out_id = p_load_out and s.status in ('orange', 'red')
     and not (s.status = 'red' and exists (select 1 from item_checkouts k where k.item_id = s.item_id and k.returned_at is null))
+    -- un oggetto catalogato DOPO la chiusura di quello smontaggio non può esserci stato
+    and not exists (select 1 from items it where it.id = s.item_id
+                    and it.created_at > coalesce((select ended_at from load_outs where id = p_load_out), now()))
   on conflict (load_out_id, item_id) do nothing;
 $$;
 

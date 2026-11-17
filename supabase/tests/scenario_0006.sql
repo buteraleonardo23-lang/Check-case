@@ -100,5 +100,19 @@ begin
   perform public.end_load_out(t.lo(), true);
 end $t$;
 
+-- 17. Un oggetto catalogato dopo la chiusura di uno smontaggio non diventa "non trovato" in quello smontaggio
+do $t$
+declare v_lo uuid; n_before int;
+begin
+  perform t.as_user('leonardo');
+  v_lo := (select id from public.load_outs where status = 'closed' order by ended_at desc limit 1);
+  insert into public.items(name, expected_case_id) values ('Catalogato dopo', t.cid('02'));
+  n_before := (select count(*) from public.load_out_issues where load_out_id = v_lo);
+  perform public.create_issues(v_lo);
+  perform t.ok((select count(*) from public.load_out_issues where load_out_id = v_lo) = n_before
+           and not exists (select 1 from public.load_out_issues where item_id = t.iid('Catalogato dopo')),
+    'rilanciare l''aggiornamento non crea voci per oggetti catalogati dopo');
+end $t$;
+
 reset role;
 select 'TUTTI I TEST 0006 SUPERATI' as esito;
