@@ -2,7 +2,6 @@ import { useRef, useState } from 'react'
 import { api } from '../lib/api'
 import { usePhotoUrl } from '../lib/photos'
 import { shrink } from '../lib/shrink'
-import { layoutPhotos, type Case } from '../lib/types'
 import { useToast } from './Toast'
 
 function Photo({ path, className, alt = '' }: { path: string; className: string; alt?: string }) {
@@ -10,19 +9,19 @@ function Photo({ path, className, alt = '' }: { path: string; className: string;
   return url ? <img src={url} alt={alt} className={className} draggable={false} /> : <div className={`${className} bg-panel-2 animate-pulse`} />
 }
 
-/** Foto "come è dentro" del case: sfogliabili; solo gli admin aggiungono o tolgono. */
-export default function LayoutGallery({ c, isAdmin, onChanged }: { c: Case; isAdmin: boolean; onChanged: () => Promise<void> }) {
-  const photos = layoutPhotos(c)
+/** Foto "come è dentro" (di un case o di una scatola): sfogliabili; solo gli admin aggiungono o tolgono. */
+export default function LayoutGallery({ id, label, photos, isAdmin, onSave }: {
+  id: string; label: string; photos: string[]; isAdmin: boolean
+  /** salva l'elenco completo delle foto (tocca SOLO le foto) */
+  onSave: (next: string[]) => Promise<void>
+}) {
   const toast = useToast()
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [open, setOpen] = useState<number | null>(null)
   const [confirmDel, setConfirmDel] = useState(false)
 
-  const save = async (next: string[]) => {
-    await api.setCasePhotos(c.id, next)
-    await onChanged()
-  }
+  const save = onSave
   const add = async (files: FileList | null) => {
     if (!files?.length) return
     setBusy(true)
@@ -53,13 +52,13 @@ export default function LayoutGallery({ c, isAdmin, onChanged }: { c: Case; isAd
           </button>
         )}
       </div>
-      <input ref={input} id={`layout-${c.id}`} type="file" accept="image/*" multiple className="sr-only" onChange={e => add(e.target.files)} />
+      <input ref={input} id={`layout-${id}`} type="file" accept="image/*" multiple className="sr-only" onChange={e => add(e.target.files)} />
 
       {photos.length > 0 ? (
         <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory no-scrollbar px-5">
           {photos.map((p, i) => (
             <button key={p} onClick={() => setOpen(i)} className={`snap-center shrink-0 relative rounded-2xl overflow-hidden border border-line ${photos.length > 1 ? 'w-[82%]' : 'w-full'}`}>
-              <Photo path={p} alt={`Come è dentro il case ${c.code}, foto ${i + 1}`} className="w-full h-56 object-cover" />
+              <Photo path={p} alt={`Come è dentro ${label}, foto ${i + 1}`} className="w-full h-56 object-cover" />
               {photos.length > 1 && <span className="absolute top-2 right-2 chip bg-ink/80 text-fog tabular-nums">{i + 1}/{photos.length}</span>}
             </button>
           ))}
@@ -74,7 +73,7 @@ export default function LayoutGallery({ c, isAdmin, onChanged }: { c: Case; isAd
       {open !== null && photos[open] && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col" role="dialog" aria-modal="true">
           <div className="flex items-center justify-between px-4 pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-2 text-fog">
-            <span className="text-sm tabular-nums">Case {c.code} · {open + 1}/{photos.length}</span>
+            <span className="text-sm tabular-nums">{label} · {open + 1}/{photos.length}</span>
             <button onClick={() => { setOpen(null); setConfirmDel(false) }} className="w-10 h-10 rounded-full bg-white/10 text-2xl" aria-label="Chiudi">×</button>
           </div>
           <div className="flex-1 min-h-0 flex items-center justify-center relative" onClick={() => setOpen(null)}>

@@ -81,6 +81,12 @@ Più foto per case: `layout_photo_path` (la prima) + `layout_photos text[]`. Si 
 ### Cestino oggetti (solo admin)
 "Elimina" = cestino (`items.active = false`, `deleted_at`, `deleted_by`): sparisce da case/ricerca/smontaggi, i dati restano, **Ripristina** lo rimette con tutto lo storico. "Elimina per sempre" (`delete_item`) solo per oggetti già nel cestino; "Svuota cestino" (`empty_trash`).
 
+### Sottocase / scatole (migration 0006)
+Un oggetto può essere una **scatola** (`items.is_container`) che contiene altri oggetti (`items.parent_item_id`). Un solo livello (niente scatola nella scatola). Solo admin decide (Catalogo: "È una scatola" / "Va dentro una scatola?"); il contenuto va nel case della scatola e la segue se cambia case (trigger).
+- Smontaggio: gli oggetti si mettono **dentro** la scatola (`place_item(..., p_container)`, `placements.container_item_id`); verde solo se sono nella loro scatola. La scatola ha la sua lista e "Tutto pronto · Chiudi scatola" (`close_container`, stesse regole del case, `container_closures`). Si mette nel case grande **solo se chiusa** (`container_open` con l'elenco di cosa manca). Riaprirla la toglie dal case.
+- Nel case la scatola conta come **un oggetto** (`close_case` e `caseProgress` ignorano il contenuto). UI: riga "Scatola" nel case → `/case/:id/scatola/:boxId` (stessa vista `CaseDetail`).
+- `place_item` ora ha 5 parametri: la vecchia firma a 4 è stata tolta (`drop function`), le chiamate a 4 parametri funzionano ancora (default).
+
 ### Aggiornamenti dell'app
 PWA in modalità `prompt`: una versione nuova NON ricarica la pagina da sola (si perderebbero schede non salvate), compare "Nuova versione disponibile · Aggiorna".
 
@@ -238,5 +244,6 @@ Grafo del codice in `graphify-out/` (costruito localmente con tree-sitter, nessu
 
 - Fatto: schema + RLS + RPC (placement, chiusura con regole, spostamenti), login, carosello case, scheda case con checklist, oggetti extra e promemoria spostamenti, ricerca "Dove va?", dashboard live, catalogo admin (nuovi case/oggetti, foto, alias, spostamenti), **registro attività + Copia per Claude, chiusura smontaggio con riepilogo, Da sistemare (= recap pre-replica)**, demo, test DB + demo, keep-alive, deploy GitHub Pages.
 - Fatto anche: foto multiple "come è dentro", smontaggio di prova, "Ho un altro evento", cestino oggetti, aggiornamento app con bottone.
-- Da fare: **sottocase** (oggetti contenitore, in definizione), danni, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case, gestione utenti da app.
+- Fatto anche: sottocase (scatole).
+- Da fare: danni, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case, gestione utenti da app.
 - Le regole di dominio sono applicate **lato DB nelle RPC**, la UI le riflette soltanto: modificare prima l'SQL.

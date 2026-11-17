@@ -11,6 +11,12 @@ export interface Case {
 export interface Item {
   id: string; name: string; aliases: string[]; expected_case_id: string | null
   photo_path: string | null; notes: string | null
+  /** sottocase: una scatola che si riempie e si chiude prima di andare nel case */
+  is_container?: boolean
+  /** la scatola in cui va questo oggetto (se va in una scatola) */
+  parent_item_id?: string | null
+  /** foto "come è dentro" della scatola */
+  layout_photos?: string[]
 }
 export interface LoadOut { id: string; started_at: string; status: 'open' | 'closed'; is_test?: boolean }
 export interface StatusRow {
@@ -18,6 +24,9 @@ export interface StatusRow {
   expected_case_id: string | null; actual_case_id: string | null
   placed_by: string | null; placed_by_name: string | null; placed_at: string | null
   status: ItemStatus
+  parent_item_id?: string | null
+  is_container?: boolean
+  actual_container_id?: string | null
 }
 export interface Closure {
   id: string; case_id: string; closed_by: string; closed_at: string; forced: boolean; note: string | null
@@ -33,8 +42,9 @@ export interface ItemMove {
 
 export interface ListedItem { name: string; case_code?: string; by?: string }
 export type PlaceResult =
-  | { result: 'ok' | 'already_here' | 'case_closed' }
-  | { result: 'conflict'; case_code: string; by: string; at: string }
+  | { result: 'ok' | 'already_here' | 'case_closed' | 'container_closed' | 'nested_container' }
+  | { result: 'container_open'; missing: ListedItem[] }
+  | { result: 'conflict'; case_code: string; container?: string | null; by: string; at: string }
 export type CloseResult =
   | { result: 'closed' | 'already_closed'; elsewhere?: ListedItem[] }
   | { result: 'needs_confirm'; elsewhere: ListedItem[] }
@@ -76,3 +86,6 @@ export type TrashedItem = Item & { deleted_at: string | null; deleted_by_name: s
 /** Tutte le foto "come è dentro" di un case, in ordine. */
 export const layoutPhotos = (c: { layout_photo_path: string | null; layout_photos?: string[] }) =>
   [c.layout_photo_path, ...(c.layout_photos ?? [])].filter((p, i, a): p is string => !!p && a.indexOf(p) === i)
+
+/** Chiusura di una scatola (sottocase) in uno smontaggio. */
+export interface ContainerClosure { id: string; item_id: string; closed_by: string; closed_at: string; forced: boolean; note: string | null }

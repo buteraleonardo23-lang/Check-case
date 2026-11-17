@@ -1,5 +1,5 @@
 import type {
-  ActivityRow, Case, Checkout, TrashedItem, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
+  ActivityRow, Case, Checkout, ContainerClosure, TrashedItem, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
   LoadOutSummary, LogRow, PlaceResult, Profile, StatusRow,
 } from './types'
 
@@ -17,7 +17,7 @@ export interface Api {
   onAuthChange(cb: () => void): () => void
   // smontaggio
   loadCatalog(): Promise<{ cases: Case[]; items: Item[]; loadOut: LoadOut | null; moves: ItemMove[] }>
-  loadState(loadOutId: string): Promise<{ status: StatusRow[]; closures: Closure[] }>
+  loadState(loadOutId: string): Promise<{ status: StatusRow[]; closures: Closure[]; containerClosures: ContainerClosure[] }>
   /** Ascolta SEMPRE le modifiche dei colleghi (anche senza smontaggio in corso).
    *  onStatus(true/false) dice se la connessione in tempo reale è attiva. */
   subscribe(onChange: () => void, onStatus?: (live: boolean) => void): () => void
@@ -29,10 +29,14 @@ export interface Api {
   loadOutSummary(loadOutId: string): Promise<LoadOutSummary>
   /** Conclude lo smontaggio (solo admin) e crea le voci "da sistemare". */
   endLoadOut(loadOutId: string): Promise<LoadOutSummary>
-  place(loadOutId: string, itemId: string, caseId: string, move: boolean): Promise<PlaceResult>
+  /** containerId: mette l'oggetto DENTRO quella scatola (sottocase) */
+  place(loadOutId: string, itemId: string, caseId: string, move: boolean, containerId?: string | null): Promise<PlaceResult>
   unplace(loadOutId: string, itemId: string): Promise<void>
   closeCase(loadOutId: string, caseId: string, o: { confirm?: boolean; force?: boolean; note?: string }): Promise<CloseResult>
   reopenCase(loadOutId: string, caseId: string): Promise<void>
+  closeContainer(loadOutId: string, containerId: string, o: { confirm?: boolean; force?: boolean; note?: string }): Promise<CloseResult>
+  /** 'case_closed': la scatola è in un case chiuso, va riaperto prima il case */
+  reopenContainer(loadOutId: string, containerId: string): Promise<'ok' | 'case_closed'>
   activity(loadOutId: string): Promise<ActivityRow[]>
   // da sistemare + registro
   issues(): Promise<LoadOutIssue[]>
@@ -52,6 +56,8 @@ export interface Api {
   trashedItems(): Promise<TrashedItem[]>
   /** Aggiorna SOLO le foto "come è dentro" (non tocca nome/numero: altri possono modificarli nello stesso momento). */
   setCasePhotos(caseId: string, photos: string[]): Promise<void>
+  /** Foto "come è dentro" di una scatola (solo quelle colonne). */
+  setItemPhotos(itemId: string, photos: string[]): Promise<void>
   saveCase(c: Partial<Case> & { code: string; name: string }): Promise<void>
   saveItem(i: Partial<Item> & { name: string }): Promise<void>
   moveItem(itemId: string, toCaseId: string, pending: boolean, note: string | null): Promise<void>

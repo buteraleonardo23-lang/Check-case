@@ -7,7 +7,8 @@ import { useLoadOut } from '../cases/LoadOutProvider'
 import { useItemSearch } from './useItemSearch'
 
 function Result({ item }: { item: Item }) {
-  const { caseById, status, loadOut } = useLoadOut()
+  const { caseById, itemById, status, loadOut } = useLoadOut()
+  const box = item.parent_item_id ? itemById.get(item.parent_item_id) : null
   const exp = item.expected_case_id ? caseById.get(item.expected_case_id) : undefined
   const s = status.get(item.id)
   const actual = s?.actual_case_id ? caseById.get(s.actual_case_id) : undefined
@@ -23,11 +24,12 @@ function Result({ item }: { item: Item }) {
       <div className="flex-1 min-w-0">
         <p className="font-semibold leading-snug">{item.name}</p>
         {item.aliases.length > 0 && <p className="text-xs text-muted truncate">{item.aliases.join(' · ')}</p>}
-        <p className="text-sm mt-1">{exp ? <>Va nel <b>case {exp.code}</b> · {exp.name}</> : 'Nessun case assegnato'}</p>
+        <p className="text-sm mt-1">{exp ? <>{box && <>Va nella <b>«{box.name}»</b>, </>}{box ? 'nel' : 'Va nel'} <b>case {exp.code}</b> · {exp.name}</> : 'Nessun case assegnato'}</p>
+        {item.is_container && <p className="text-xs text-accent mt-0.5">▣ È una scatola: si riempie e si chiude prima di metterla nel case</p>}
         {loadOut && s && (
           <p className="text-xs mt-1 flex items-center gap-2 text-muted">
             <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusStyle[s.status].dot}`} />
-            {actual ? <>Ora nel case {actual.code} · {s.placed_by_name} {timeOf(s.placed_at)}</> : 'Non ancora in nessun case'}
+            {actual ? <>Ora {s.actual_container_id ? `nella «${itemById.get(s.actual_container_id)?.name}», ` : ''}nel case {actual.code} · {s.placed_by_name} {timeOf(s.placed_at)}</> : 'Non ancora in nessun case'}
           </p>
         )}
       </div>

@@ -32,7 +32,7 @@ export async function run() {
   const s = await api.loadOutSummary('lo-demo')
   ok(s.misplaced.length === 2 && s.misplaced.some(m => m.name === 'Scatola rossa' && m.actual_code === '08' && m.by === 'Diego'),
     'riepilogo: 2 nel case sbagliato (Scatola rossa nel 08, messa da Diego)')
-  ok(s.missing.length === s.total - s.placed - (s.checked_out?.length ?? 0) && s.missing.length === 100 - 58 - 1, `riepilogo: ${s.missing.length} non trovati`)
+  ok(s.missing.length === s.total - s.placed - (s.checked_out?.length ?? 0) && s.missing.length === 40 /* 101 oggetti - 60 segnati - 1 fuori per evento */, `riepilogo: ${s.missing.length} non trovati`)
   ok(s.open_cases.includes('05') && !s.open_cases.includes('01'), 'riepilogo: case aperti elencati')
   ok(s.checked_out?.length === 1 && s.checked_out[0].name === 'Accordatore' && s.checked_out[0].event === 'Serata in Duomo',
     'riepilogo: l\'Accordatore è "fuori per Serata in Duomo", non "non trovato"')
@@ -166,6 +166,44 @@ export async function run() {
   await api.emptyTrash()
   ok(!(await api.trashedItems()).length && !(await cat()).items.some(i => i.id === 'i03-1'), '"Svuota cestino": eliminati per sempre')
   ok((await api.activityLog('all')).some(l => l.message.startsWith('Leonardo ha eliminato per sempre l\'oggetto «Radiomicrofono archetto 1»')), 'registro: eliminazione definitiva')
+
+  console.log('Sottocase')
+  await as('diego')
+  ok(await throws(() => api.saveItem({ id: 'i10-1', name: 'Cassetta attrezzi', is_container: true })), 'un operatore non può creare sottocase')
+  await as('leonardo')
+  await api.saveItem({ name: 'Scatola cavi', aliases: [], expected_case_id: 'c09', is_container: true })
+  const box = (await cat()).items.find(i => i.name === 'Scatola cavi')!.id
+  for (const n of ['Cavi XLR (sacca)', 'Cavi DMX (sacca)', 'Forbici']) {
+    const it = (await cat()).items.find(i => i.name === n)!
+    await api.saveItem({ id: it.id, name: it.name, parent_item_id: box })
+  }
+  ok((await cat()).items.find(i => i.name === 'Forbici')?.expected_case_id === 'c09', 'le Forbici entrano nella scatola e vanno nel 09')
+  ok(await throws(() => api.saveItem({ name: 'Scatola nella scatola', is_container: true, parent_item_id: box })), 'niente scatola dentro scatola')
+  ok(await throws(() => api.trashItem(box)), 'una scatola piena non va nel cestino')
+  await api.startLoadOut()
+  const l2 = (await cat()).loadOut!.id
+  await as('diego')
+  let pr = await api.place(l2, box, 'c09', false)
+  ok(pr.result === 'container_open' && pr.missing.length === 3, 'la scatola vuota non si mette nel case')
+  await api.place(l2, await id('Cavi XLR (sacca)'), 'c09', false, box)
+  await api.place(l2, await id('Cavi DMX (sacca)'), 'c09', false, box)
+  await api.place(l2, await id('Forbici'), 'c09', false)
+  ok((await st(l2, 'Forbici')).status === 'orange', 'Forbici nel case ma fuori dalla scatola: ARANCIONE')
+  await api.place(l2, await id('Forbici'), 'c09', true, box)
+  ok((await st(l2, 'Forbici')).status === 'green', 'rimesse nella scatola: VERDI')
+  ok((await api.closeContainer(l2, box, {})).result === 'closed', 'scatola completa: chiusa')
+  ok((await api.place(l2, await id('Nastro gaffer'), 'c09', false, box)).result === 'container_closed', 'scatola chiusa: non si aggiunge niente')
+  ok((await api.place(l2, box, 'c09', false)).result === 'ok' && (await st(l2, 'Scatola cavi')).status === 'green', 'ora la scatola va nel case 09: VERDE')
+  const cc = await api.closeCase(l2, 'c09', {})
+  ok(cc.result === 'blocked' && !cc.missing.some(m => m.name === 'Cavi XLR (sacca)' || m.name === 'Scatola cavi'), 'case 09: la scatola conta come un oggetto')
+  ok(await api.reopenContainer(l2, box) === 'ok' && (await st(l2, 'Scatola cavi')).status === 'red', 'riaprire la scatola la toglie dal case')
+  const lg = await api.activityLog(l2)
+  ok(lg.some(l => l.message === 'Diego ha messo «Cavi XLR (sacca)» nella «Scatola cavi» (case 09)'), 'registro: "… nella «Scatola cavi» (case 09)"')
+  ok(lg.some(l => l.message === 'Diego ha messo «Forbici» nel case 09 (dovrebbe stare nella «Scatola cavi»)'), 'registro: "… (dovrebbe stare nella «Scatola cavi»)"')
+  await as('leonardo')
+  await api.moveItem(await id('Forbici'), 'c10', false, null)
+  ok((await cat()).items.find(i => i.name === 'Forbici')?.parent_item_id === null, 'spostare le Forbici nel case 10 le toglie dalla scatola')
+  await api.endLoadOut(l2)
 
   console.log(failed ? `\n${failed} TEST FALLITI` : '\nTUTTI I TEST DELLA DEMO SUPERATI')
   return failed

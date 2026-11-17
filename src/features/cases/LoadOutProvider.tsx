@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../../lib/api'
-import type { Case, Checkout, CloseResult, Closure, IssueAction, Item, ItemMove, LoadOut, LoadOutIssue, LoadOutSummary, PlaceResult, StatusRow } from '../../lib/types'
+import type { Case, Checkout, CloseResult, Closure, ContainerClosure, IssueAction, Item, ItemMove, LoadOut, LoadOutIssue, LoadOutSummary, PlaceResult, StatusRow } from '../../lib/types'
 
 interface LoadOutCtx {
   loading: boolean
@@ -10,6 +10,7 @@ interface LoadOutCtx {
   moves: ItemMove[]
   status: Map<string, StatusRow>        // item_id → stato
   closures: Map<string, Closure>        // case_id → chiusura attiva
+  boxClosures: Map<string, ContainerClosure>   // id scatola → chiusura attiva
   caseById: Map<string, Case>
   itemById: Map<string, Item>
   issues: LoadOutIssue[]                // voci "da sistemare" (tutte, anche risolte)
@@ -31,10 +32,12 @@ interface LoadOutCtx {
   loadOutSummary: () => Promise<LoadOutSummary>
   endLoadOut: () => Promise<LoadOutSummary>
   resolveIssues: (ids: string[], action: IssueAction, note?: string | null) => Promise<void>
-  place: (itemId: string, caseId: string, move?: boolean) => Promise<PlaceResult>
+  place: (itemId: string, caseId: string, move?: boolean, boxId?: string | null) => Promise<PlaceResult>
   unplace: (itemId: string) => Promise<void>
   closeCase: (caseId: string, opts?: { confirm?: boolean; force?: boolean; note?: string }) => Promise<CloseResult>
   reopenCase: (caseId: string) => Promise<void>
+  closeBox: (boxId: string, opts?: { confirm?: boolean; force?: boolean; note?: string }) => Promise<CloseResult>
+  reopenBox: (boxId: string) => Promise<'ok' | 'case_closed'>
 }
 
 const Ctx = createContext<LoadOutCtx | null>(null)
@@ -47,6 +50,7 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
   const [moves, setMoves] = useState<ItemMove[]>([])
   const [statusRows, setStatusRows] = useState<StatusRow[]>([])
   const [closureRows, setClosureRows] = useState<Closure[]>([])
+  const [boxClosureRows, setBoxClosureRows] = useState<ContainerClosure[]>([])
   const [issues, setIssues] = useState<LoadOutIssue[]>([])
   const [dbOutdated, setDbOutdated] = useState(false)
   const [checkouts, setCheckouts] = useState<Checkout[]>([])
@@ -59,8 +63,8 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
     loRef.current = cat.loadOut
     if (cat.loadOut) {
       const st = await api.loadState(cat.loadOut.id)
-      setStatusRows(st.status); setClosureRows(st.closures)
-    } else { setStatusRows([]); setClosureRows([]) }
+      setStatusRows(st.status); setClosureRows(st.closures); setBoxClosureRows(st.containerClosures ?? [])
+    } else { setStatusRows([]); setClosureRows([]); setBoxClosureRows([]) }
     try { setIssues(await api.issues()); setDbOutdated(false) }
     catch { setIssues([]); setDbOutdated(true) }   // migration 0003 non ancora eseguita
     try { setCheckouts(await api.checkouts()) } catch { setCheckouts([]) }   // migration 0005 non ancora eseguita
@@ -113,6 +117,7 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
     isTest: !!loadOut?.is_test,
     status: new Map(statusRows.map(r => [r.item_id, r])),
     closures: new Map(closureRows.map(r => [r.case_id, r])),
+    boxClosures: new Map(boxClosureRows.map(r => [r.item_id, r])),
     caseById: new Map(cases.map(c => [c.id, c])),
     itemById: new Map(items.map(i => [i.id, i])),
     refresh,
@@ -127,11 +132,13 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
     loadOutSummary: () => api.loadOutSummary(loId()),
     endLoadOut: () => after(api.endLoadOut(loId())),
     resolveIssues: (ids, action, note = null) => after(api.resolveIssues(ids, action, note)),
-    place: (itemId, caseId, move = false) => after(api.place(loId(), itemId, caseId, move)),
+    place: (itemId, caseId, move = false, boxId = null) => after(api.place(loId(), itemId, caseId, move, boxId)),
     unplace: (itemId) => after(api.unplace(loId(), itemId)),
     closeCase: (caseId, o = {}) => after(api.closeCase(loId(), caseId, o)),
     reopenCase: (caseId) => after(api.reopenCase(loId(), caseId)),
-  }), [loading, loadOut, cases, items, activeIds, moves, version, issues, dbOutdated, checkouts, statusRows, closureRows, refresh])
+    closeBox: (boxId, o = {}) => after(api.closeContainer(loId(), boxId, o)),
+    reopenBox: (boxId) => after(api.reopenContainer(loId(), boxId)),
+  }), [loading, loadOut, cases, items, activeIds, moves, version, issues, dbOutdated, checkouts, statusRows, closureRows, boxClosureRows, refresh])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -146,7 +153,19 @@ export function useLoadOut() {
 export function caseProgress(caseId: string, items: Item[], status: Map<string, StatusRow>) {
   let total = 0, green = 0, orange = 0, red = 0
   for (const it of items) {
-    if (it.expected_case_id !== caseId) continue
+    if (it.expected_case_id !== caseId || it.parent_item_id) continue   // il contenuto delle scatole conta nella scatola
+    total++
+    const s = status.get(it.id)?.status ?? 'red'
+    if (s === 'green') green++; else if (s === 'orange') orange++; else red++
+  }
+  return { total, green, orange, red }
+}
+
+/** Progresso di una scatola (sottocase): i suoi oggetti, rispetto alla scatola. */
+export function boxProgress(boxId: string, items: Item[], status: Map<string, StatusRow>) {
+  let total = 0, green = 0, orange = 0, red = 0
+  for (const it of items) {
+    if (it.parent_item_id !== boxId) continue
     total++
     const s = status.get(it.id)?.status ?? 'red'
     if (s === 'green') green++; else if (s === 'orange') orange++; else red++

@@ -2,17 +2,18 @@
 // Replica le stesse regole delle RPC e dei trigger in supabase/migrations (vedi i test in demoApi.test.ts).
 import type { Api } from '../lib/api'
 import type {
-  Case, Checkout, CloseResult, Closure, IssueAction, Item, ItemMove, ListedItem, LoadOut, LoadOutInfo, LoadOutIssue,
+  Case, Checkout, CloseResult, Closure, ContainerClosure, IssueAction, Item, ItemMove, ListedItem, LoadOut, LoadOutInfo, LoadOutIssue,
   LoadOutSummary, LogRow, PlaceResult, Profile, StatusRow,
 } from '../lib/types'
 import { demoCases, demoItems, demoUsers } from './demoData'
 
-interface Placement { id: string; load_out_id: string; item_id: string; case_id: string; placed_by: string; placed_at: string; removed_at: string | null }
+interface Placement { id: string; load_out_id: string; item_id: string; case_id: string; container_item_id?: string | null; placed_by: string; placed_at: string; removed_at: string | null }
+interface DbContainerClosure extends ContainerClosure { load_out_id: string; reopened_at: string | null }
 interface DbClosure extends Closure { load_out_id: string; reopened_at: string | null }
 type DbIssue = Omit<LoadOutIssue, 'load_out_date' | 'placed_by_name'> & { placed_by: string | null }
 interface Db {
   cases: Case[]; items: Item[]; loadOuts: LoadOutInfo[]
-  placements: Placement[]; closures: DbClosure[]; moves: (ItemMove & { created_by: string })[]
+  placements: Placement[]; closures: DbClosure[]; containerClosures: DbContainerClosure[]; moves: (ItemMove & { created_by: string })[]
   issues: DbIssue[]; log: LogRow[]
   checkouts: (Omit<Checkout, 'taken_by_name'> & { taken_by: string | null })[]
   trash: (Item & { deleted_at: string; deleted_by: string | null })[]
@@ -20,7 +21,7 @@ interface Db {
 }
 type DbLoadOut = LoadOutInfo & { is_test?: boolean }
 
-const KEY = 'checkcase-demo-v4'
+const KEY = 'checkcase-demo-v5'
 const uid = () => Math.random().toString(36).slice(2, 10)
 const now = () => new Date().toISOString()
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
@@ -42,6 +43,14 @@ const isTest = (loId: string) => !!(db.loadOuts as DbLoadOut[]).find(l => l.id =
 const isOut = (itemId: string) => db.checkouts.some(k => k.item_id === itemId && !k.returned_at)
 const active = (loId: string, itemId: string) => db.placements.find(p => p.load_out_id === loId && p.item_id === itemId && !p.removed_at)
 const closureOf = (loId: string, caseId: string) => db.closures.find(c => c.load_out_id === loId && c.case_id === caseId && !c.reopened_at)
+const boxClosureOf = (loId: string, boxId: string | null | undefined) =>
+  boxId ? db.containerClosures.find(c => c.load_out_id === loId && c.item_id === boxId && !c.reopened_at) : undefined
+const boxLabel = (id: string | null | undefined) => `«${(id && anyItem(id)?.name) || '?'}»`
+/** "nella «Scatola» (case 09)" oppure "nel case 09" */
+const whereLabel = (caseId: string | null, boxId?: string | null) => boxId ? `nella ${boxLabel(boxId)} (${caseLabel(caseId)})` : `nel ${caseLabel(caseId)}`
+/** al suo posto: nella sua scatola se ne ha una, altrimenti nel suo case */
+const inRightPlace = (it: Item | undefined, caseId: string, boxId?: string | null) =>
+  !!it && (it.parent_item_id ? (boxId ?? null) === it.parent_item_id : caseId === it.expected_case_id)
 const requireAdmin = (msg = 'Solo Matteo e Leonardo possono farlo') => { if (me()?.role !== 'admin') throw new Error(msg) }
 const pause = () => new Promise(r => setTimeout(r, 100))
 let logSeq = 1
@@ -57,7 +66,8 @@ function statusRows(loId: string): StatusRow[] {
       item_id: i.id, item_name: i.name, aliases: i.aliases, expected_case_id: i.expected_case_id,
       actual_case_id: p?.case_id ?? null, placed_by: p?.placed_by ?? null,
       placed_by_name: p ? userName(p.placed_by) : null, placed_at: p?.placed_at ?? null,
-      status: !p ? 'red' : p.case_id === i.expected_case_id ? 'green' : 'orange',
+      status: !p ? 'red' : inRightPlace(i, p.case_id, p.container_item_id) ? 'green' : 'orange',
+      parent_item_id: i.parent_item_id ?? null, is_container: !!i.is_container, actual_container_id: p?.container_item_id ?? null,
     }
   })
 }
@@ -82,14 +92,16 @@ function summary(loId: string): LoadOutSummary {
   }
 }
 
-function placeRaw(loId: string, itemId: string, caseId: string, by: string, at = now()) {
-  db.placements.push({ id: uid(), load_out_id: loId, item_id: itemId, case_id: caseId, placed_by: by, placed_at: at, removed_at: null })
-  const exp = itemOf(itemId)?.expected_case_id ?? null
-  log(exp === caseId ? 'placed' : 'placed_elsewhere', by,
-    `ha messo ${itemLabel(itemId)} nel ${caseLabel(caseId)}${exp !== caseId ? ` (dovrebbe stare nel ${caseLabel(exp)})` : ''}`, loId, at)
+function placeRaw(loId: string, itemId: string, caseId: string, by: string, at = now(), boxId: string | null = null) {
+  db.placements.push({ id: uid(), load_out_id: loId, item_id: itemId, case_id: caseId, container_item_id: boxId, placed_by: by, placed_at: at, removed_at: null })
+  const it = itemOf(itemId)
+  const exp = it?.expected_case_id ?? null
+  const ok = inRightPlace(it, caseId, boxId)
+  log(ok ? 'placed' : 'placed_elsewhere', by,
+    `ha messo ${itemLabel(itemId)} ${whereLabel(caseId, boxId)}${ok ? '' : ` (dovrebbe stare ${it?.parent_item_id ? `nella ${boxLabel(it.parent_item_id)}` : `nel ${caseLabel(exp)}`})`}`, loId, at)
   if (isTest(loId)) return   // una prova non tocca i dati veri
-  // oggetto preso per un evento e rimesso nel suo case: rientrato
-  for (const k of db.checkouts) if (k.item_id === itemId && !k.returned_at && caseId === exp)
+  // oggetto preso per un evento e rimesso al suo posto: rientrato
+  for (const k of db.checkouts) if (k.item_id === itemId && !k.returned_at && ok)
     Object.assign(k, { returned_at: at, returned_by: by })
   // spostamenti decisi completati
   for (const m of db.moves) if (m.item_id === itemId && m.status === 'pending' && m.to_case_id === caseId) {
@@ -98,7 +110,7 @@ function placeRaw(loId: string, itemId: string, caseId: string, by: string, at =
   }
   // voci di smontaggi precedenti che si risolvono da sole
   for (const i of db.issues) if (i.item_id === itemId && i.status === 'open' && i.load_out_id !== loId
-    && (i.kind === 'missing' || caseId === exp)) {
+    && (i.kind === 'missing' || ok)) {
     Object.assign(i, { status: 'resolved', resolution: i.kind === 'missing' ? 'found' : 'fixed', resolved_at: at,
       note: i.note ?? 'Risolto automaticamente allo smontaggio successivo' })
   }
@@ -106,7 +118,7 @@ function placeRaw(loId: string, itemId: string, caseId: string, by: string, at =
 
 function moveItemRaw(itemId: string, toCaseId: string, pending: boolean, note: string | null) {
   const item = itemOf(itemId)!
-  if (item.expected_case_id === toCaseId) return
+  if (item.expected_case_id === toCaseId && !item.parent_item_id) return
   for (const m of db.moves) if (m.item_id === itemId && m.status === 'pending') m.status = 'done'
   db.moves.push({ id: uid(), item_id: itemId, from_case_id: item.expected_case_id, to_case_id: toCaseId,
     status: pending ? 'pending' : 'done', note, created_at: now(), created_by: db.userId!, created_by_name: userName(db.userId) })
@@ -114,13 +126,18 @@ function moveItemRaw(itemId: string, toCaseId: string, pending: boolean, note: s
   for (const i of db.issues) if (i.item_id === itemId && i.kind === 'misplaced' && i.status === 'open' && i.actual_case_id === toCaseId)
     Object.assign(i, { status: 'resolved', resolution: 'reassigned', resolved_at: now() })
   item.expected_case_id = toCaseId
+  item.parent_item_id = null   // spostato in un altro case: esce dalla scatola
+  for (const c of db.items) if (c.parent_item_id === itemId) c.expected_case_id = toCaseId   // il contenuto segue la scatola
 }
 
 // ───── dati iniziali ─────
 function seed(): Db {
   db = {
-    cases: demoCases.map(c => ({ ...c })), items: demoItems.map(i => ({ ...i })),
-    loadOuts: [], placements: [], closures: [], moves: [], issues: [], log: [], checkouts: [], trash: [], userId: null,
+    cases: demoCases.map(c => ({ ...c })),
+    items: [...demoItems.map(i => ({ ...i })),
+      { id: 'i05-box', name: 'Valigetta dei trucchi', aliases: ['valigetta', 'trucchi piccoli'], expected_case_id: 'c05',
+        photo_path: null, notes: 'Si chiude con le cinghie, poi va in fondo al case 05', is_container: true, parent_item_id: null }],
+    loadOuts: [], placements: [], closures: [], containerClosures: [], moves: [], issues: [], log: [], checkouts: [], trash: [], userId: null,
   }
   logSeq = 1
   // smontaggio precedente (4 giorni fa), già concluso: ha lasciato qualcosa da sistemare
@@ -167,6 +184,10 @@ function seed(): Db {
   fill('07', 5, 'rossana')
   fill('08', 4, 'diego')
   fill('09', 7, 'lorenzo')
+  // sottocase: la Valigetta dei trucchi va nel case 05 e contiene Corda, Bicchieri e palline, Busta delle previsioni
+  for (const i of ['i05-8', 'i05-9', 'i05-10']) { const it = itemOf(i)!; it.parent_item_id = 'i05-box' }
+  placeRaw(lo.id, 'i05-8', 'c05', 'u-matteo', minsAgo((t -= 0.4)), 'i05-box')
+  placeRaw(lo.id, 'i05-9', 'c05', 'u-matteo', minsAgo((t -= 0.4)), 'i05-box')
   db.closures.push({ id: uid(), load_out_id: lo.id, case_id: 'c01', closed_by: 'u-lorenzo', closed_at: minsAgo(20), forced: false, note: null, reopened_at: null })
   log('case_closed', 'u-lorenzo', 'ha chiuso il case 01', lo.id, minsAgo(20))
   db.log.sort((a, b) => a.at.localeCompare(b.at))
@@ -239,7 +260,10 @@ export const demoApi: Api = {
     }
   },
   async loadState(loId) {
-    return { status: statusRows(loId), closures: db.closures.filter(c => c.load_out_id === loId && !c.reopened_at) }
+    return {
+      status: statusRows(loId), closures: db.closures.filter(c => c.load_out_id === loId && !c.reopened_at),
+      containerClosures: db.containerClosures.filter(c => c.load_out_id === loId && !c.reopened_at),
+    }
   },
   subscribe(cb, onStatus) { listeners.add(cb); onStatus?.(true); return () => { listeners.delete(cb) } },
   async startLoadOut(test = false) {
@@ -257,6 +281,7 @@ export const demoApi: Api = {
     db.loadOuts = db.loadOuts.filter(l => l.id !== loId)
     db.placements = db.placements.filter(p => p.load_out_id !== loId)
     db.closures = db.closures.filter(c => c.load_out_id !== loId)
+    db.containerClosures = db.containerClosures.filter(c => c.load_out_id !== loId)
     db.issues = db.issues.filter(i => i.load_out_id !== loId)
     db.log = db.log.filter(l => l.load_out_id !== loId)
     log('test_discarded', db.userId, `ha fatto uno smontaggio di prova (iniziato alle ${new Date(lo.started_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}, dati scartati)`)
@@ -284,6 +309,15 @@ export const demoApi: Api = {
     }
     commit()
   },
+  async setItemPhotos(itemId, photos) {
+    requireAdmin()
+    const it = itemOf(itemId)
+    if (!it) throw new Error('Oggetto non trovato')
+    it.photo_path = photos[0] ?? null
+    it.layout_photos = photos.slice(1)
+    log('item_updated', db.userId, `ha aggiornato le foto di «${it.name}»`)
+    commit()
+  },
   async setCasePhotos(caseId, photos) {
     requireAdmin()
     const c = db.cases.find(x => x.id === caseId)
@@ -297,6 +331,7 @@ export const demoApi: Api = {
     requireAdmin('Solo un admin può eliminare oggetti')
     const it = itemOf(itemId)
     if (!it) throw new Error('Oggetto non trovato o già nel cestino')
+    if (db.items.some(c => c.parent_item_id === itemId)) throw new Error('Questo sottocase contiene ancora oggetti: toglili prima')
     log('item_trashed', db.userId, `ha spostato nel cestino ${itemLabel(itemId)} (era nel ${caseLabel(it.expected_case_id)})`)
     db.items = db.items.filter(i => i.id !== itemId)
     db.trash.push({ ...it, deleted_at: now(), deleted_by: db.userId })
@@ -319,6 +354,7 @@ export const demoApi: Api = {
     log('item_deleted', db.userId, `ha eliminato per sempre l'oggetto «${t.name}» (era nel ${caseLabel(t.expected_case_id)})`)
     db.trash = db.trash.filter(i => i.id !== itemId)
     db.placements = db.placements.filter(p => p.item_id !== itemId)
+    db.containerClosures = db.containerClosures.filter(c => c.item_id !== itemId)
     db.issues = db.issues.filter(i => i.item_id !== itemId)
     db.moves = db.moves.filter(m => m.item_id !== itemId)
     db.checkouts = db.checkouts.filter(k => k.item_id !== itemId)
@@ -354,32 +390,46 @@ export const demoApi: Api = {
     return s
   },
 
-  async place(loId, itemId, caseId, move): Promise<PlaceResult> {
+  async place(loId, itemId, caseId, move, boxId = null): Promise<PlaceResult> {
     await pause()
-    if (closureOf(loId, caseId)) return { result: 'case_closed' }
+    const it = itemOf(itemId)
+    let cs = caseId
+    if (boxId) {
+      const box = itemOf(boxId)
+      if (!box?.is_container) throw new Error('Non è un sottocase')
+      if (it?.is_container) return { result: 'nested_container' }
+      cs = box.expected_case_id!
+      if (boxClosureOf(loId, boxId)) return { result: 'container_closed' }
+    }
+    if (closureOf(loId, cs)) return { result: 'case_closed' }
+    if (it?.is_container && !boxClosureOf(loId, itemId)) {
+      return { result: 'container_open', missing: statusRows(loId).filter(r => r.parent_item_id === itemId && r.status === 'red').map(r => ({ name: r.item_name })) }
+    }
     const cur = active(loId, itemId)
     if (cur) {
-      if (cur.case_id === caseId) return { result: 'already_here' }
-      if (!move) return { result: 'conflict', case_code: caseCode(cur.case_id), by: userName(cur.placed_by), at: cur.placed_at }
+      if (cur.case_id === cs && (cur.container_item_id ?? null) === (boxId ?? null)) return { result: 'already_here' }
+      if (!move) return { result: 'conflict', case_code: caseCode(cur.case_id), container: cur.container_item_id ? anyItem(cur.container_item_id)?.name ?? null : null, by: userName(cur.placed_by), at: cur.placed_at }
+      if (boxClosureOf(loId, cur.container_item_id)) return { result: 'container_closed' }
+      if (closureOf(loId, cur.case_id)) return { result: 'case_closed' }
       cur.removed_at = now()
-      log('removed', db.userId, `ha tolto ${itemLabel(itemId)} dal ${caseLabel(cur.case_id)}`, loId)
+      log('removed', db.userId, `ha tolto ${itemLabel(itemId)} ${cur.container_item_id ? `dalla ${boxLabel(cur.container_item_id)} (${caseLabel(cur.case_id)})` : `dal ${caseLabel(cur.case_id)}`}`, loId)
     }
-    placeRaw(loId, itemId, caseId, db.userId!)
+    placeRaw(loId, itemId, cs, db.userId!, now(), boxId)
     commit()
     return { result: 'ok' }
   },
   async unplace(loId, itemId) {
     const cur = active(loId, itemId)
-    if (cur && !closureOf(loId, cur.case_id)) {
+    if (cur && !closureOf(loId, cur.case_id) && !boxClosureOf(loId, cur.container_item_id)) {
       cur.removed_at = now()
-      log('removed', db.userId, `ha tolto ${itemLabel(itemId)} dal ${caseLabel(cur.case_id)}`, loId)
+      log('removed', db.userId, `ha tolto ${itemLabel(itemId)} ${cur.container_item_id ? `dalla ${boxLabel(cur.container_item_id)} (${caseLabel(cur.case_id)})` : `dal ${caseLabel(cur.case_id)}`}`, loId)
       commit()
     }
   },
   async closeCase(loId, caseId, o): Promise<CloseResult> {
     await pause()
     if (closureOf(loId, caseId)) return { result: 'already_closed' }
-    const rows = statusRows(loId).filter(r => r.expected_case_id === caseId)
+    const rows = statusRows(loId).filter(r => r.expected_case_id === caseId && !r.parent_item_id)   // le scatole contano come un oggetto
     const missing: ListedItem[] = rows.filter(r => r.status === 'red').map(r => ({ name: r.item_name }))
     const elsewhere: ListedItem[] = rows.filter(r => r.status === 'orange')
       .map(r => ({ name: r.item_name, case_code: caseCode(r.actual_case_id), by: r.placed_by_name ?? undefined }))
@@ -395,6 +445,31 @@ export const demoApi: Api = {
   async reopenCase(loId, caseId) {
     const c = closureOf(loId, caseId)
     if (c) { c.reopened_at = now(); log('case_reopened', db.userId, `ha riaperto il ${caseLabel(caseId)}`, loId); commit() }
+  },
+  async closeContainer(loId, boxId, o): Promise<CloseResult> {
+    await pause()
+    if (boxClosureOf(loId, boxId)) return { result: 'already_closed' }
+    const rows = statusRows(loId).filter(r => r.parent_item_id === boxId)
+    const missing: ListedItem[] = rows.filter(r => r.status === 'red').map(r => ({ name: r.item_name }))
+    const elsewhere: ListedItem[] = rows.filter(r => r.status === 'orange')
+      .map(r => ({ name: r.item_name, case_code: caseCode(r.actual_case_id), by: r.placed_by_name ?? undefined }))
+    if (missing.length && !(o.force && me()?.role === 'admin' && o.note?.trim())) return { result: 'blocked', missing, elsewhere }
+    if (!missing.length && elsewhere.length && !o.confirm) return { result: 'needs_confirm', elsewhere }
+    const forced = missing.length > 0
+    db.containerClosures.push({ id: uid(), load_out_id: loId, item_id: boxId, closed_by: db.userId!, closed_at: now(), forced, note: o.note ?? null, reopened_at: null })
+    log(forced ? 'container_forced' : 'container_closed', db.userId,
+      forced ? `ha FORZATO la chiusura della ${boxLabel(boxId)} (nota: ${o.note})` : `ha chiuso la ${boxLabel(boxId)}`, loId)
+    commit()
+    return { result: 'closed', elsewhere }
+  },
+  async reopenContainer(loId, boxId) {
+    const placed = active(loId, boxId)
+    if (placed && closureOf(loId, placed.case_id)) return 'case_closed'
+    if (placed) placed.removed_at = now()
+    const c = boxClosureOf(loId, boxId)
+    if (c) { c.reopened_at = now(); log('container_reopened', db.userId, `ha riaperto la ${boxLabel(boxId)}`, loId) }
+    commit()
+    return 'ok'
   },
   async activity(loId) {
     return db.placements.filter(p => p.load_out_id === loId).sort((a, b) => b.placed_at.localeCompare(a.placed_at)).slice(0, 40)
@@ -451,13 +526,27 @@ export const demoApi: Api = {
   },
   async saveItem(i) {
     requireAdmin()
+    const parent = i.parent_item_id ? itemOf(i.parent_item_id) : null
+    if (i.parent_item_id) {
+      if (!parent?.is_container) throw new Error('Si mette dentro solo a un sottocase')
+      if (parent.parent_item_id || i.is_container) throw new Error('Un sottocase non può stare dentro un altro sottocase')
+      i = { ...i, expected_case_id: parent.expected_case_id }
+    }
     if (i.id) {
-      Object.assign(db.items.find(x => x.id === i.id)!, i)
+      const it = db.items.find(x => x.id === i.id)!
+      if (it.is_container && i.is_container === false && db.items.some(c => c.parent_item_id === it.id))
+        throw new Error('Togli prima gli oggetti che ci sono dentro')
+      if (i.is_container !== undefined && !!i.is_container !== !!it.is_container)
+        log('item_container', db.userId, i.is_container ? `ha reso «${i.name}» un sottocase` : `ha tolto «${i.name}» dai sottocase`)
+      if (i.parent_item_id !== undefined && (i.parent_item_id ?? null) !== (it.parent_item_id ?? null))
+        log('item_parent', db.userId, i.parent_item_id ? `ha messo «${i.name}» dentro la ${boxLabel(i.parent_item_id)}` : `ha tolto «${i.name}» dalla ${boxLabel(it.parent_item_id)}`)
+      Object.assign(it, i)
+      if (it.is_container) for (const c of db.items) if (c.parent_item_id === it.id) c.expected_case_id = it.expected_case_id
       log('item_updated', db.userId, `ha modificato l'oggetto «${i.name}»`)
     } else {
       const it = { aliases: [], expected_case_id: null, photo_path: null, notes: null, ...i, id: uid() } as Item
       db.items.push(it)
-      log('item_created', db.userId, `ha creato l'oggetto «${i.name}» nel ${caseLabel(it.expected_case_id)}`)
+      log('item_created', db.userId, `ha creato l'oggetto «${i.name}» ${it.parent_item_id ? `dentro la ${boxLabel(it.parent_item_id)}` : `nel ${caseLabel(it.expected_case_id)}`}`)
     }
     commit()
   },

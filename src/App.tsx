@@ -29,6 +29,7 @@ function Gate() {
         <Route element={<Layout />}>
           <Route index element={<CaseCarousel />} />
           <Route path="case/:id" element={<CaseDetail />} />
+          <Route path="case/:id/scatola/:boxId" element={<CaseDetail />} />
           <Route path="cerca" element={<SearchPage />} />
           <Route path="dashboard" element={<AdminOnly><DashboardPage /></AdminOnly>} />
           <Route path="catalogo" element={<AdminOnly><CatalogPage /></AdminOnly>} />

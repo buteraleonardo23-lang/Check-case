@@ -6,7 +6,7 @@ import { api } from '../../lib/api'
 import { usePhotoUrl } from '../../lib/photos'
 import { shrink } from '../../lib/shrink'
 import { dateOf } from '../../lib/status'
-import type { Case, Item, TrashedItem } from '../../lib/types'
+import { layoutPhotos, type Case, type Item, type TrashedItem } from '../../lib/types'
 import { useLoadOut } from '../cases/LoadOutProvider'
 import { useItemSearch } from '../search/useItemSearch'
 
@@ -67,7 +67,7 @@ function CaseForm({ c, onClose }: { c: Case | null; onClose: () => void }) {
       <textarea id="case-notes" className="field min-h-20" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Note per chi lo riempie" />
       <PhotoInput id="case-photo" label="Foto del case (copertina)" value={f.photo_path} onChange={p => setF({ ...f, photo_path: p })} />
       {c
-        ? <div className="-mx-5"><LayoutGallery c={lo.caseById.get(c.id) ?? c} isAdmin onChanged={lo.refresh} /></div>
+        ? <div className="-mx-5"><LayoutGallery id={c.id} label={`case ${c.code}`} photos={layoutPhotos(lo.caseById.get(c.id) ?? c)} isAdmin onSave={async next => { await api.setCasePhotos(c.id, next); await lo.refresh() }} /></div>
         : <p className="text-xs text-muted">Le foto di come va sistemato dentro le aggiungi dopo, dalla scheda del case.</p>}
       <button disabled={!f.code.trim() || !f.name.trim()} onClick={save} className="btn-primary w-full">{c ? 'Salva' : 'Crea case'}</button>
     </Modal>
@@ -80,7 +80,11 @@ function ItemForm({ item, onClose }: { item: Item | null; onClose: () => void })
   const [f, setF] = useState({
     name: item?.name ?? '', aliases: item?.aliases.join(', ') ?? '', notes: item?.notes ?? '',
     photo_path: item?.photo_path ?? null, expected_case_id: item?.expected_case_id ?? lo.cases[0]?.id ?? null,
+    is_container: !!item?.is_container, parent_item_id: item?.parent_item_id ?? null,
   })
+  const boxes = lo.items.filter(i => i.is_container && i.id !== item?.id)
+  const children = item ? lo.items.filter(i => i.parent_item_id === item.id) : []
+  const parentBox = f.parent_item_id ? lo.itemById.get(f.parent_item_id) : null
   const [moveTo, setMoveTo] = useState<string | null>(null)
   const [pending, setPending] = useState(true)
   const [moveNote, setMoveNote] = useState('')
@@ -96,9 +100,13 @@ function ItemForm({ item, onClose }: { item: Item | null; onClose: () => void })
   const save = async () => {
     try {
       const aliases = f.aliases.split(',').map(a => a.trim()).filter(Boolean)
+      // scatola / dentro una scatola: si inviano solo se cambiano (così non si tocca niente per sbaglio)
+      const boxFields: Partial<Item> = {}
+      if (f.is_container !== !!item?.is_container) boxFields.is_container = f.is_container
+      if ((f.parent_item_id ?? null) !== (item?.parent_item_id ?? null)) boxFields.parent_item_id = f.parent_item_id
       await api.saveItem({
-        ...(item ? { id: item.id } : { expected_case_id: f.expected_case_id }),
-        name: f.name.trim(), aliases, notes: f.notes || null, photo_path: f.photo_path,
+        ...(item ? { id: item.id } : { expected_case_id: parentBox?.expected_case_id ?? f.expected_case_id }),
+        name: f.name.trim(), aliases, notes: f.notes || null, photo_path: f.photo_path, ...boxFields,
       })
       if (item && moveTo) await api.moveItem(item.id, moveTo, pending, moveNote || null)
       await lo.refresh()
@@ -126,15 +134,42 @@ function ItemForm({ item, onClose }: { item: Item | null; onClose: () => void })
       <textarea id="item-notes" className="field min-h-16" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Note (opzionale)" />
       <PhotoInput id="item-photo" label="Foto oggetto" value={f.photo_path} onChange={p => setF({ ...f, photo_path: p })} />
 
-      {!item ? (
+      <div className="rounded-2xl border border-line p-3.5 space-y-3">
+        <p className="eyebrow">Scatole (sottocase)</p>
+        {!f.parent_item_id && (
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input id="item-container" type="checkbox" className="mt-1 w-5 h-5 accent-[#0BB9EA]" checked={f.is_container}
+              disabled={f.is_container && children.length > 0}
+              onChange={e => setF({ ...f, is_container: e.target.checked })} />
+            <span className="text-sm">
+              <b>È una scatola</b> che contiene altri oggetti: si riempie e si chiude prima di metterla nel case.
+              {f.is_container && children.length > 0 && <span className="block text-xs text-muted mt-1">Contiene {children.length} oggetti: per toglierla dalle scatole, prima sposta fuori gli oggetti.</span>}
+            </span>
+          </label>
+        )}
+        {!f.is_container && (
+          <div className="space-y-1.5">
+            <label htmlFor="item-parent" className="text-sm text-muted">Va dentro una scatola?</label>
+            <select id="item-parent" className="field" value={f.parent_item_id ?? ''} onChange={e => setF({ ...f, parent_item_id: e.target.value || null })}>
+              <option value="">No, va direttamente nel case</option>
+              {boxes.map(b => <option key={b.id} value={b.id}>«{b.name}» · case {lo.caseById.get(b.expected_case_id ?? '')?.code ?? '—'}</option>)}
+            </select>
+            {boxes.length === 0 && <p className="text-xs text-muted">Non ci sono ancora scatole: rendi prima un oggetto “scatola”.</p>}
+          </div>
+        )}
+      </div>
+
+      {!item ? (parentBox ? (
+        <p className="text-sm text-muted">Va nel case {lo.caseById.get(parentBox.expected_case_id ?? '')?.code ?? '—'} insieme alla scatola.</p>
+      ) : (
         <div className="space-y-2">
           <span className="eyebrow text-muted">Va nel case</span>
           <CasePicker value={f.expected_case_id} onPick={id => setF({ ...f, expected_case_id: id })} />
         </div>
-      ) : (
+      )) : (
         <div className="rounded-2xl border border-line p-3.5 space-y-3">
           <p className="eyebrow">⇄ Sposta in un altro case</p>
-          <p className="text-sm text-muted">Ora va nel <b className="text-fog">case {current?.code ?? '—'}</b>{current && ` · ${current.name}`}. Scegli il nuovo case:</p>
+          <p className="text-sm text-muted">Ora va {item.parent_item_id ? <>nella <b className="text-fog">«{lo.itemById.get(item.parent_item_id)?.name}»</b>, </> : null}nel <b className="text-fog">case {current?.code ?? '—'}</b>{current && ` · ${current.name}`}. Scegli il nuovo case{item.parent_item_id ? ' (esce dalla scatola)' : ''}:</p>
           <CasePicker value={moveTo} onPick={id => setMoveTo(moveTo === id ? null : id)} exclude={item.expected_case_id} />
           {moveTo && (
             <div className="space-y-2 rise">
@@ -318,7 +353,9 @@ export default function CatalogPage() {
                     <span className="title text-lg w-8 shrink-0" style={{ color: c?.color ?? undefined }}>{c?.code ?? '—'}</span>
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-medium truncate">{i.name}</span>
-                      {(i.aliases.length > 0 || mv) && <span className="block text-xs text-muted truncate">
+                      {(i.aliases.length > 0 || mv || i.is_container || i.parent_item_id) && <span className="block text-xs text-muted truncate">
+                        {i.is_container && <span className="text-accent">▣ scatola · {lo.items.filter(x => x.parent_item_id === i.id).length} oggetti · </span>}
+                        {i.parent_item_id && <span className="text-accent">↳ nella «{lo.itemById.get(i.parent_item_id)?.name}» · </span>}
                         {mv && <span className="text-accent">⇄ da spostare · </span>}{i.aliases.join(' · ')}
                       </span>}
                     </span>

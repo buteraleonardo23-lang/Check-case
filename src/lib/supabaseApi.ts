@@ -1,6 +1,6 @@
 import { supabase, usernameToEmail } from './supabase'
 import type { Api } from './api'
-import type { ActivityRow, Case, Checkout, TrashedItem, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
+import type { ActivityRow, Case, Checkout, ContainerClosure, TrashedItem, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
 
 const must = <T,>({ data, error }: { data: T; error: { message: string } | null }) => {
   if (error) throw new Error(error.message)
@@ -32,7 +32,7 @@ export const supabaseApi: Api = {
   async loadCatalog() {
     const [c, i, lo, mv] = await Promise.all([
       supabase.from('cases').select('*').eq('active', true).order('sort_order').order('code'),
-      supabase.from('items').select('id, name, aliases, expected_case_id, photo_path, notes').eq('active', true).order('name'),
+      supabase.from('items').select('*').eq('active', true).order('name'),
       supabase.from('load_outs').select('*').eq('status', 'open').maybeSingle(),
       supabase.from('item_moves').select('*, profiles!item_moves_created_by_fkey(display_name)')
         .order('created_at', { ascending: false }).limit(100),
@@ -45,15 +45,19 @@ export const supabaseApi: Api = {
     }
   },
   async loadState(loadOutId) {
-    const [s, cl] = await Promise.all([
+    const [st, cl, kc] = await Promise.all([
       supabase.from('load_out_item_status').select('*').eq('load_out_id', loadOutId),
       supabase.from('case_closures').select('*').eq('load_out_id', loadOutId).is('reopened_at', null),
+      supabase.from('container_closures').select('*').eq('load_out_id', loadOutId).is('reopened_at', null),
     ])
-    return { status: (s.data ?? []) as StatusRow[], closures: (cl.data ?? []) as Closure[] }
+    return {
+      status: (st.data ?? []) as StatusRow[], closures: (cl.data ?? []) as Closure[],
+      containerClosures: (kc.error ? [] : kc.data ?? []) as ContainerClosure[],   // prima della migration 0006: nessuna
+    }
   },
   subscribe(onChange, onStatus) {
     // un solo canale per tutte le tabelle che cambiano lo stato visto dagli altri telefoni
-    const tables = ['load_outs', 'placements', 'case_closures', 'item_moves', 'load_out_issues', 'item_checkouts', 'cases', 'items']
+    const tables = ['load_outs', 'placements', 'case_closures', 'container_closures', 'item_moves', 'load_out_issues', 'item_checkouts', 'cases', 'items']
     let ch = supabase.channel(`checkcase-${Math.random().toString(36).slice(2)}`)
     for (const table of tables) ch = ch.on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
     ch.subscribe(status => onStatus?.(status === 'SUBSCRIBED'))
@@ -72,14 +76,25 @@ export const supabaseApi: Api = {
     const r = must(await supabase.rpc('end_load_out', { p_load_out: id, p_confirm: true })) as any
     return r.summary
   },
-  async place(lo, item, cs, move) {
-    return must(await supabase.rpc('place_item', { p_load_out: lo, p_item: item, p_case: cs, p_move: move }))
+  async place(lo, item, cs, move, containerId) {
+    const args: Record<string, unknown> = { p_load_out: lo, p_item: item, p_case: cs, p_move: move }
+    if (containerId) args.p_container = containerId
+    return must(await supabase.rpc('place_item', args))
   },
   async unplace(lo, item) { must(await supabase.rpc('unplace_item', { p_load_out: lo, p_item: item })) },
   async closeCase(lo, cs, o) {
     return must(await supabase.rpc('close_case', {
       p_load_out: lo, p_case: cs, p_confirm: o.confirm ?? false, p_force: o.force ?? false, p_note: o.note ?? null,
     }))
+  },
+  async closeContainer(lo, box, o) {
+    return must(await supabase.rpc('close_container', {
+      p_load_out: lo, p_container: box, p_confirm: o.confirm ?? false, p_force: o.force ?? false, p_note: o.note ?? null,
+    }))
+  },
+  async reopenContainer(lo, box) {
+    const r = must(await supabase.rpc('reopen_container', { p_load_out: lo, p_container: box })) as any
+    return r.result
   },
   async reopenCase(lo, cs) { must(await supabase.rpc('reopen_case', { p_load_out: lo, p_case: cs })) },
   async activity(lo) {
@@ -123,6 +138,9 @@ export const supabaseApi: Api = {
     return r.result
   },
   async returnCheckouts(ids, note) { must(await supabase.rpc('return_checkouts', { p_ids: ids, p_note: note })) },
+  async setItemPhotos(itemId, photos) {
+    must(await supabase.from('items').update({ photo_path: photos[0] ?? null, layout_photos: photos.slice(1) }).eq('id', itemId))
+  },
   async setCasePhotos(caseId, photos) {
     must(await supabase.from('cases').update({ layout_photo_path: photos[0] ?? null, layout_photos: photos.slice(1) }).eq('id', caseId))
   },
