@@ -1,5 +1,5 @@
 import type {
-  ActivityRow, Case, Checkout, ContainerClosure, TrashedItem, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
+  ActivityRow, Case, Checkout, ContainerClosure, TrashedCase, TrashedItem, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
   LoadOutSummary, LogRow, PlaceResult, Profile, StatusRow,
 } from './types'
 
@@ -54,6 +54,10 @@ export interface Api {
   deleteItemForever(itemId: string): Promise<void>
   emptyTrash(): Promise<void>
   trashedItems(): Promise<TrashedItem[]>
+  /** Cestino dei case: solo case VUOTI; si ripristinano, non si eliminano per sempre (lo storico resta). */
+  trashCase(caseId: string): Promise<void>
+  restoreCase(caseId: string): Promise<void>
+  trashedCases(): Promise<TrashedCase[]>
   /** Aggiorna SOLO le foto "come è dentro" (non tocca nome/numero: altri possono modificarli nello stesso momento). */
   setCasePhotos(caseId: string, photos: string[]): Promise<void>
   /** Foto "come è dentro" di una scatola (solo quelle colonne). */

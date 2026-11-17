@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "src/demo/demoApi.ts": {
-    "mtime": 1794955080.7324605,
-    "seen": 1794955350.2377381,
-    "ast_hash": "e34067d9c91a5b9402baa8d2f4806793",
+    "mtime": 1794956487.7283425,
+    "seen": 1794956576.108423,
+    "ast_hash": "c26a8b551e691d177a62774dd8792d26",
     "semantic_hash": ""
   },
   "src/demo/demoData.ts": {
@@ -54,9 +54,9 @@
     "semantic_hash": ""
   },
   "src/features/admin/CatalogPage.tsx": {
-    "mtime": 1794955236.292915,
-    "seen": 1794955350.237761,
-    "ast_hash": "6b7bd78cafaf6a1175e4dbce04c44460",
+    "mtime": 1794956510.3796122,
+    "seen": 1794956576.1084495,
+    "ast_hash": "b2d0988b207eb4bc982b8e2bf609dd78",
     "semantic_hash": ""
   },
   "src/features/auth/AuthProvider.tsx": {
@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "src/lib/api.ts": {
-    "mtime": 1794955023.1908598,
-    "seen": 1794955350.2379682,
-    "ast_hash": "e22d40c8f42c01865fb703e7a06809ad",
+    "mtime": 1794956487.7268786,
+    "seen": 1794956576.1087306,
+    "ast_hash": "bfd7f8a5b456de7aad88119b15e7184e",
     "semantic_hash": ""
   },
   "src/lib/photos.ts": {
@@ -132,15 +132,15 @@
     "semantic_hash": ""
   },
   "src/lib/supabaseApi.ts": {
-    "mtime": 1794955023.2001119,
-    "seen": 1794955350.2380857,
-    "ast_hash": "50257d9b1d6ab0a741b8f5759f819745",
+    "mtime": 1794956487.727374,
+    "seen": 1794956576.108848,
+    "ast_hash": "c8913a014188b7e3d7ff94783124a47b",
     "semantic_hash": ""
   },
   "src/lib/types.ts": {
-    "mtime": 1794955023.1906247,
-    "seen": 1794955350.238087,
-    "ast_hash": "68b2191a5755e10cfe9125292be2c912",
+    "mtime": 1794956487.7227044,
+    "seen": 1794956576.1088495,
+    "ast_hash": "dfdeb050ae18f08fd46dd71090de918c",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1794955348.9417698,
-    "seen": 1794955350.2382505,
-    "ast_hash": "d5d562d349acc77e0dacca5a1e4c6b79",
+    "mtime": 1794956574.6457708,
+    "seen": 1794956576.1089494,
+    "ast_hash": "8de3fd42c29a5e949f963cb4ab9bc8ff",
     "semantic_hash": ""
   },
   "README.md": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/demo/demoApi.scenario.ts": {
-    "mtime": 1794955103.126607,
-    "seen": 1794955350.2377367,
-    "ast_hash": "2b6ddc8992d1222117fae7b87c085fc2",
+    "mtime": 1794956526.2002025,
+    "seen": 1794956576.1084208,
+    "ast_hash": "689f2591bc01e39e0bd3a73fc071c037",
     "semantic_hash": ""
   },
   "src/features/fix/AdminNotices.tsx": {
@@ -342,9 +342,9 @@
     "semantic_hash": ""
   },
   "supabase/tests/run.sh": {
-    "mtime": 1794954939.2338538,
-    "seen": 1794955350.2381537,
-    "ast_hash": "354cc8a513139575644fcf3f523f90f4",
+    "mtime": 1794956462.888114,
+    "seen": 1794956576.10887,
+    "ast_hash": "8e8516b01dfa3f8b596d5098e75b0280",
     "semantic_hash": ""
   },
   ".github/workflows/pages.yml": {

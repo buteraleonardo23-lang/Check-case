@@ -17,6 +17,7 @@ interface Db {
   issues: DbIssue[]; log: LogRow[]
   checkouts: (Omit<Checkout, 'taken_by_name'> & { taken_by: string | null })[]
   trash: (Item & { deleted_at: string; deleted_by: string | null })[]
+  caseTrash: (Case & { deleted_at: string; deleted_by: string | null })[]
   userId: string | null
 }
 type DbLoadOut = LoadOutInfo & { is_test?: boolean }
@@ -33,7 +34,7 @@ const authListeners = new Set<() => void>()
 // ───── helper (lavorano sul db corrente) ─────
 const me = () => demoUsers.find(u => u.id === db.userId) ?? null
 const userName = (id: string | null) => demoUsers.find(u => u.id === id)?.display_name ?? 'Sistema'
-const caseCode = (id: string | null) => db.cases.find(c => c.id === id)?.code ?? '?'
+const caseCode = (id: string | null) => (db.cases.find(c => c.id === id) ?? db.caseTrash?.find(c => c.id === id))?.code ?? '?'
 const caseLabel = (id: string | null) => id ? `case ${caseCode(id)}` : 'nessun case'
 const itemOf = (id: string) => db.items.find(i => i.id === id)
 const anyItem = (id: string) => itemOf(id) ?? db.trash.find(i => i.id === id)
@@ -137,7 +138,7 @@ function seed(): Db {
     items: [...demoItems.map(i => ({ ...i })),
       { id: 'i05-box', name: 'Valigetta dei trucchi', aliases: ['valigetta', 'trucchi piccoli'], expected_case_id: 'c05',
         photo_path: null, notes: 'Si chiude con le cinghie, poi va in fondo al case 05', is_container: true, parent_item_id: null }],
-    loadOuts: [], placements: [], closures: [], containerClosures: [], moves: [], issues: [], log: [], checkouts: [], trash: [], userId: null,
+    loadOuts: [], placements: [], closures: [], containerClosures: [], moves: [], issues: [], log: [], checkouts: [], trash: [], caseTrash: [], userId: null,
   }
   logSeq = 1
   // smontaggio precedente (4 giorni fa), già concluso: ha lasciato qualcosa da sistemare
@@ -341,6 +342,7 @@ export const demoApi: Api = {
     requireAdmin('Solo un admin può ripristinare oggetti')
     const t = db.trash.find(i => i.id === itemId)
     if (!t) throw new Error('Oggetto non trovato nel cestino')
+    if (t.expected_case_id && db.caseTrash.some(c => c.id === t.expected_case_id)) throw new Error('Il suo case è nel cestino: ripristina prima il case')
     const { deleted_at: _a, deleted_by: _b, ...it } = t
     db.trash = db.trash.filter(i => i.id !== itemId)
     db.items.push(it)
@@ -363,6 +365,33 @@ export const demoApi: Api = {
   async emptyTrash() {
     requireAdmin('Solo un admin può svuotare il cestino')
     for (const t of [...db.trash]) await demoApi.deleteItemForever(t.id)
+  },
+  async trashCase(caseId) {
+    requireAdmin('Solo un admin può eliminare i case')
+    const c = db.cases.find(x => x.id === caseId)
+    if (!c) throw new Error('Case non trovato o già nel cestino')
+    const n = db.items.filter(i => i.expected_case_id === caseId).length
+    if (n) throw new Error(`Il case ${c.code} contiene ancora ${n} oggetti: spostali in un altro case prima di eliminarlo`)
+    const lo = openLo()
+    if (lo && (closureOf(lo.id, caseId) || db.placements.some(p => p.load_out_id === lo.id && p.case_id === caseId && !p.removed_at)))
+      throw new Error(`Il case ${c.code} è in uso nello smontaggio in corso: riprova quando è concluso`)
+    db.cases = db.cases.filter(x => x.id !== caseId)
+    db.caseTrash.push({ ...c, deleted_at: now(), deleted_by: db.userId })
+    log('case_trashed', db.userId, `ha spostato nel cestino il case ${c.code} «${c.name}»`)
+    commit()
+  },
+  async restoreCase(caseId) {
+    requireAdmin('Solo un admin può ripristinare i case')
+    const t = db.caseTrash.find(x => x.id === caseId)
+    if (!t) throw new Error('Case non trovato nel cestino')
+    const { deleted_at: _a, deleted_by: _b, ...c } = t
+    db.caseTrash = db.caseTrash.filter(x => x.id !== caseId)
+    db.cases.push(c)
+    log('case_restored', db.userId, `ha ripristinato il case ${c.code} «${c.name}»`)
+    commit()
+  },
+  async trashedCases() {
+    return (db.caseTrash ?? []).map(c => ({ ...c, deleted_by_name: c.deleted_by ? userName(c.deleted_by) : null }))
   },
   async trashedItems() {
     return db.trash.map(t => ({ ...t, deleted_by_name: t.deleted_by ? userName(t.deleted_by) : null }))

@@ -82,6 +82,8 @@ export interface Checkout {
 
 /** Oggetto nel cestino: sparito da case e smontaggi, ma recuperabile. */
 export type TrashedItem = Item & { deleted_at: string | null; deleted_by_name: string | null }
+/** Case nel cestino: sparito da home e catalogo, recuperabile. */
+export type TrashedCase = Case & { deleted_at: string | null; deleted_by_name: string | null }
 
 /** Tutte le foto "come è dentro" di un case, in ordine. */
 export const layoutPhotos = (c: { layout_photo_path: string | null; layout_photos?: string[] }) =>

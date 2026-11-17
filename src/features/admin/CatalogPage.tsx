@@ -6,7 +6,7 @@ import { api } from '../../lib/api'
 import { usePhotoUrl } from '../../lib/photos'
 import { shrink } from '../../lib/shrink'
 import { dateOf } from '../../lib/status'
-import { layoutPhotos, type Case, type Item, type TrashedItem } from '../../lib/types'
+import { layoutPhotos, type Case, type Item, type TrashedCase, type TrashedItem } from '../../lib/types'
 import { useLoadOut } from '../cases/LoadOutProvider'
 import { useItemSearch } from '../search/useItemSearch'
 
@@ -46,6 +46,13 @@ function CaseForm({ c, onClose }: { c: Case | null; onClose: () => void }) {
     notes: c?.notes ?? '', photo_path: c?.photo_path ?? null,
   })
   // le foto "come è dentro" NON passano da qui: le salva la galleria da sola (così non si sovrascrivono)
+  const [confirmTrash, setConfirmTrash] = useState(false)
+  const nItems = c ? lo.items.filter(i => i.expected_case_id === c.id).length : 0
+  const trash = async () => {
+    if (!c) return
+    try { await api.trashCase(c.id); await lo.refresh(); toast(`Case ${c.code} spostato nel cestino`, 'ok'); onClose() }
+    catch (e) { toast((e as Error).message, 'bad') }
+  }
   const save = async () => {
     try {
       await api.saveCase({ ...(c ? { id: c.id } : {}), ...f, notes: f.notes || null })
@@ -70,6 +77,19 @@ function CaseForm({ c, onClose }: { c: Case | null; onClose: () => void }) {
         ? <div className="-mx-5"><LayoutGallery id={c.id} label={`case ${c.code}`} photos={layoutPhotos(lo.caseById.get(c.id) ?? c)} isAdmin onSave={async next => { await api.setCasePhotos(c.id, next); await lo.refresh() }} /></div>
         : <p className="text-xs text-muted">Le foto di come va sistemato dentro le aggiungi dopo, dalla scheda del case.</p>}
       <button disabled={!f.code.trim() || !f.name.trim()} onClick={save} className="btn-primary w-full">{c ? 'Salva' : 'Crea case'}</button>
+      {c && (nItems > 0 ? (
+        <p className="text-xs text-muted text-center">Per eliminare questo case prima sposta i suoi {nItems} oggetti in un altro case.</p>
+      ) : confirmTrash ? (
+        <div className="rounded-2xl border border-bad/50 bg-bad/[0.07] p-4 space-y-3">
+          <p className="text-sm">Spostare il case {c.code} «{c.name}» nel <b>cestino</b>? Sparisce da home e catalogo; lo puoi ripristinare dal Catalogo → Cestino. Il suo storico negli smontaggi passati resta.</p>
+          <div className="flex gap-2">
+            <button onClick={trash} className="btn-bad flex-1 py-2.5">Sposta nel cestino</button>
+            <button onClick={() => setConfirmTrash(false)} className="btn-ghost flex-1 py-2.5">Annulla</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setConfirmTrash(true)} className="w-full text-sm text-bad/80 underline underline-offset-2 py-1">Elimina case (sposta nel cestino)</button>
+      ))}
     </Modal>
   )
 }
@@ -225,7 +245,7 @@ function CaseRow({ c, onEdit }: { c: Case; onEdit: () => void }) {
   )
 }
 
-function TrashTab({ trash }: { trash: TrashedItem[] }) {
+function TrashTab({ trash, cases }: { trash: TrashedItem[]; cases: TrashedCase[] }) {
   const lo = useLoadOut()
   const toast = useToast()
   const [busy, setBusy] = useState(false)
@@ -236,9 +256,26 @@ function TrashTab({ trash }: { trash: TrashedItem[] }) {
     try { await fn(); toast(msg, 'ok') } catch (e) { toast((e as Error).message, 'bad') }
     setBusy(false); setForever(null); setConfirmEmpty(false)
   }
-  if (!trash.length) return <p className="text-sm text-muted">Il cestino è vuoto. Gli oggetti eliminati finiscono qui e si possono ripristinare.</p>
+  const caseSection = cases.length > 0 && (
+    <section className="space-y-2">
+      <h2 className="eyebrow text-muted">Case nel cestino · {cases.length}</h2>
+      {cases.map(c => (
+        <div key={c.id} className="rounded-2xl border border-line bg-panel p-4 flex items-center gap-3">
+          <span className="title text-2xl w-10 shrink-0 opacity-70" style={{ color: c.color ?? undefined }}>{c.code}</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold">{c.name}</p>
+            <p className="text-xs text-muted">{c.deleted_at && `Eliminato il ${dateOf(c.deleted_at)}`}{c.deleted_by_name && ` da ${c.deleted_by_name}`}</p>
+          </div>
+          <button disabled={busy} onClick={() => run(async () => { await api.restoreCase(c.id); await lo.refresh() }, `Case ${c.code} ripristinato`)} className="btn-primary px-4 py-2.5 text-sm">Ripristina</button>
+        </div>
+      ))}
+    </section>
+  )
+  if (!trash.length) return <div className="space-y-4">{caseSection}<p className="text-sm text-muted">{cases.length ? 'Nessun oggetto nel cestino.' : 'Il cestino è vuoto. Oggetti e case eliminati finiscono qui e si possono ripristinare.'}</p></div>
   return (
     <div className="space-y-3">
+      {caseSection}
+      {cases.length > 0 && <h2 className="eyebrow text-muted pt-2">Oggetti nel cestino · {trash.length}</h2>}
       <p className="text-xs text-muted">Questi oggetti non compaiono nei case, nella ricerca e negli smontaggi. “Ripristina” li rimette nel loro case con tutto lo storico.</p>
       {trash.map(t => {
         const c = t.expected_case_id ? lo.caseById.get(t.expected_case_id) : null
@@ -287,7 +324,11 @@ export default function CatalogPage() {
   const lo = useLoadOut()
   const [tab, setTab] = useState<'cases' | 'items' | 'trash'>('items')
   const [trash, setTrash] = useState<TrashedItem[]>([])
-  useEffect(() => { api.trashedItems().then(setTrash).catch(() => setTrash([])) }, [lo.version])
+  const [trashCases, setTrashCases] = useState<TrashedCase[]>([])
+  useEffect(() => {
+    api.trashedItems().then(setTrash).catch(() => setTrash([]))
+    api.trashedCases().then(setTrashCases).catch(() => setTrashCases([]))
+  }, [lo.version])
   const [editCase, setEditCase] = useState<Case | null | 'new'>(null)
   const [editItem, setEditItem] = useState<Item | null | 'new'>(null)
   const [filter, setFilter] = useState<string | null>(null)
@@ -299,7 +340,7 @@ export default function CatalogPage() {
   const tabs = [
     { k: 'items' as const, t: 'Oggetti', n: lo.items.length },
     { k: 'cases' as const, t: 'Case', n: lo.cases.length },
-    { k: 'trash' as const, t: 'Cestino', n: trash.length },
+    { k: 'trash' as const, t: 'Cestino', n: trash.length + trashCases.length },
   ]
 
   return (
@@ -329,7 +370,7 @@ export default function CatalogPage() {
         <div className="space-y-2">{lo.cases.map(c => <CaseRow key={c.id} c={c} onEdit={() => setEditCase(c)} />)}</div>
       )}
 
-      {tab === 'trash' && <TrashTab trash={trash} />}
+      {tab === 'trash' && <TrashTab trash={trash} cases={trashCases} />}
 
       {tab === 'items' && (
         <div className="space-y-3">

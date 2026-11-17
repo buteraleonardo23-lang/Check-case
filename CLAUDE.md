@@ -81,6 +81,9 @@ Più foto per case: `layout_photo_path` (la prima) + `layout_photos text[]`. Si 
 ### Cestino oggetti (solo admin)
 "Elimina" = cestino (`items.active = false`, `deleted_at`, `deleted_by`): sparisce da case/ricerca/smontaggi, i dati restano, **Ripristina** lo rimette con tutto lo storico. "Elimina per sempre" (`delete_item`) solo per oggetti già nel cestino; "Svuota cestino" (`empty_trash`).
 
+### Cestino dei case (solo admin, migration 0007)
+Un case va nel cestino (`trash_case`: `cases.active = false`, `deleted_at`, `deleted_by`) **solo se vuoto** (nessun oggetto attivo assegnato) e non in uso nello smontaggio in corso. Si ripristina (`restore_case`); **non** si elimina per sempre (lo storico degli smontaggi passati resta). Un oggetto non si ripristina né si assegna a un case nel cestino (trigger). UI: Catalogo → scheda del case → "Elimina case"; Catalogo → Cestino.
+
 ### Sottocase / scatole (migration 0006)
 Un oggetto può essere una **scatola** (`items.is_container`) che contiene altri oggetti (`items.parent_item_id`). Un solo livello (niente scatola nella scatola). Solo admin decide (Catalogo: "È una scatola" / "Va dentro una scatola?"); il contenuto va nel case della scatola e la segue se cambia case (trigger).
 - Smontaggio: gli oggetti si mettono **dentro** la scatola (`place_item(..., p_container)`, `placements.container_item_id`); verde solo se sono nella loro scatola. La scatola ha la sua lista e "Tutto pronto · Chiudi scatola" (`close_container`, stesse regole del case, `container_closures`). Si mette nel case grande **solo se chiusa** (`container_open` con l'elenco di cosa manca). Riaprirla la toglie dal case.
@@ -244,6 +247,6 @@ Grafo del codice in `graphify-out/` (costruito localmente con tree-sitter, nessu
 
 - Fatto: schema + RLS + RPC (placement, chiusura con regole, spostamenti), login, carosello case, scheda case con checklist, oggetti extra e promemoria spostamenti, ricerca "Dove va?", dashboard live, catalogo admin (nuovi case/oggetti, foto, alias, spostamenti), **registro attività + Copia per Claude, chiusura smontaggio con riepilogo, Da sistemare (= recap pre-replica)**, demo, test DB + demo, keep-alive, deploy GitHub Pages.
 - Fatto anche: foto multiple "come è dentro", smontaggio di prova, "Ho un altro evento", cestino oggetti, aggiornamento app con bottone.
-- Fatto anche: sottocase (scatole).
+- Fatto anche: sottocase (scatole), cestino dei case.
 - Da fare: danni, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case, gestione utenti da app.
 - Le regole di dominio sono applicate **lato DB nelle RPC**, la UI le riflette soltanto: modificare prima l'SQL.

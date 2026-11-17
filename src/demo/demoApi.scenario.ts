@@ -205,6 +205,20 @@ export async function run() {
   ok((await cat()).items.find(i => i.name === 'Forbici')?.parent_item_id === null, 'spostare le Forbici nel case 10 le toglie dalla scatola')
   await api.endLoadOut(l2)
 
+  console.log('Cestino dei case')
+  await as('leonardo')
+  await api.saveCase({ code: '11', name: 'Case di prova' })
+  const c11 = (await cat()).cases.find(c => c.code === '11')!.id
+  await as('diego')
+  ok(await throws(() => api.trashCase(c11)), 'un operatore non può eliminare un case')
+  await as('leonardo')
+  ok(await throws(() => api.trashCase('c02')), 'un case con oggetti NON va nel cestino')
+  await api.trashCase(c11)
+  ok(!(await cat()).cases.some(c => c.id === c11) && (await api.trashedCases()).some(c => c.id === c11), 'case vuoto: va nel cestino')
+  ok((await api.activityLog('all')).some(l => l.message === 'Leonardo ha spostato nel cestino il case 11 «Case di prova»'), 'registro: case nel cestino')
+  await api.restoreCase(c11)
+  ok((await cat()).cases.some(c => c.id === c11) && !(await api.trashedCases()).length, 'case ripristinato')
+
   console.log(failed ? `\n${failed} TEST FALLITI` : '\nTUTTI I TEST DELLA DEMO SUPERATI')
   return failed
 }

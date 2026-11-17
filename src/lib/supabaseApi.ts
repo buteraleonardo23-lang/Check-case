@@ -1,6 +1,6 @@
 import { supabase, usernameToEmail } from './supabase'
 import type { Api } from './api'
-import type { ActivityRow, Case, Checkout, ContainerClosure, TrashedItem, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
+import type { ActivityRow, Case, Checkout, ContainerClosure, TrashedCase, TrashedItem, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
 
 const must = <T,>({ data, error }: { data: T; error: { message: string } | null }) => {
   if (error) throw new Error(error.message)
@@ -148,6 +148,16 @@ export const supabaseApi: Api = {
   async restoreItem(itemId) { must(await supabase.rpc('restore_item', { p_item: itemId })) },
   async deleteItemForever(itemId) { must(await supabase.rpc('delete_item', { p_item: itemId })) },
   async emptyTrash() { must(await supabase.rpc('empty_trash')) },
+  async trashCase(caseId) { must(await supabase.rpc('trash_case', { p_case: caseId })) },
+  async restoreCase(caseId) { must(await supabase.rpc('restore_case', { p_case: caseId })) },
+  async trashedCases() {
+    const { data, error } = await supabase.from('cases').select('*').eq('active', false).order('code')
+    if (error) throw new Error(error.message)
+    const ids = [...new Set((data ?? []).map((c: any) => c.deleted_by).filter(Boolean))]
+    const { data: ps } = ids.length ? await supabase.from('profiles').select('id, display_name').in('id', ids) : { data: [] as any[] }
+    const name = new Map((ps ?? []).map((p: any) => [p.id, p.display_name]))
+    return (data ?? []).map((c: any) => ({ ...c, deleted_at: c.deleted_at ?? null, deleted_by_name: name.get(c.deleted_by) ?? null })) as TrashedCase[]
+  },
   async trashedItems() {
     const { data, error } = await supabase.from('items')
       .select('id, name, aliases, expected_case_id, photo_path, notes, deleted_at, profiles!items_deleted_by_fkey(display_name)')
