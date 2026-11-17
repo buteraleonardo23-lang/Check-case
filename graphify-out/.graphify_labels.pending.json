@@ -8,5 +8,7 @@
   "6": "gen-setup-sql.mjs",
   "7": "compilerOptions",
   "8": "run.sh",
-  "9": "App.tsx"
+  "9": "App.tsx",
+  "10": "Regole di dominio (il cuore dell'app)",
+  "11": "pwa-stub.ts"
 }

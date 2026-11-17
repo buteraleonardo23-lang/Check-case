@@ -16,7 +16,8 @@ export default defineConfig(({ mode }) => {
       single
         ? viteSingleFile()
         : VitePWA({
-            registerType: 'autoUpdate',
+            // 'prompt': la nuova versione si installa solo quando l'utente tocca "Aggiorna" (mai ricaricamenti a sorpresa)
+            registerType: 'prompt',
             includeAssets: ['icons/*.png'],
             manifest: {
               name: 'Check-case',
@@ -36,6 +37,7 @@ export default defineConfig(({ mode }) => {
             },
           }),
     ],
+    resolve: single ? { alias: { 'virtual:pwa-register/react': '/src/lib/pwa-stub.ts' } } : {},
     define: single ? {
       'import.meta.env.VITE_DEMO': JSON.stringify('true'),
       'import.meta.env.VITE_ROUTER': JSON.stringify('memory'),

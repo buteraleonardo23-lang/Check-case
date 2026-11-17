@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import { ToastProvider } from './components/Toast'
+import UpdateBanner from './components/UpdateBanner'
 import CatalogPage from './features/admin/CatalogPage'
 import { AuthProvider, useAuth } from './features/auth/AuthProvider'
 import LoginPage from './features/auth/LoginPage'
@@ -9,6 +10,7 @@ import CaseCarousel from './features/cases/CaseCarousel'
 import CaseDetail from './features/cases/CaseDetail'
 import { LoadOutProvider } from './features/cases/LoadOutProvider'
 import DashboardPage from './features/dashboard/DashboardPage'
+import EventPage from './features/event/EventPage'
 import FixPage from './features/fix/FixPage'
 import LogPage from './features/log/LogPage'
 import SearchPage from './features/search/SearchPage'
@@ -32,6 +34,7 @@ function Gate() {
           <Route path="catalogo" element={<AdminOnly><CatalogPage /></AdminOnly>} />
           <Route path="da-sistemare" element={<AdminOnly><FixPage /></AdminOnly>} />
           <Route path="registro" element={<AdminOnly><LogPage /></AdminOnly>} />
+          <Route path="evento" element={<AdminOnly><EventPage /></AdminOnly>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
@@ -40,5 +43,5 @@ function Gate() {
 }
 
 export default function App() {
-  return <ToastProvider><AuthProvider><Gate /></AuthProvider></ToastProvider>
+  return <ToastProvider><AuthProvider><Gate /></AuthProvider><UpdateBanner /></ToastProvider>
 }

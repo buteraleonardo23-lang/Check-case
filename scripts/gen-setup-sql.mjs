@@ -28,4 +28,18 @@ out += 'insert into public.items (name, aliases, expected_case_id)\nselect v.nam
   demoItems.map(i => `  (${q(i.name)}, array[${i.aliases.map(q).join(', ')}]::text[], ${q(i.expected_case_id.slice(1))})`).join(',\n') +
   '\n) as v(name, aliases, code)\njoin public.cases c on c.code = v.code\nwhere not exists (select 1 from public.items i where i.name = v.name);\n'
 writeFileSync(join(root, 'supabase/setup_completo.sql'), out)
+
+// Aggiornamento per il progetto GIÀ IN USO: tutte le migration dalla 0003 in poi (sono tutte rilanciabili).
+const upd = migrations.filter(m => m >= '0003')
+let agg = `-- ═══════════════════════════════════════════════════════════════
+-- Check-case · AGGIORNAMENTO del database già in uso (${upd.join(', ')})
+-- PRIMA lancia supabase/backup.sql. Poi incolla tutto questo nello SQL Editor e premi Run.
+-- Si può lanciare anche più volte e in qualsiasi stato: aggiunge solo quello che manca,
+-- non cancella e non modifica i dati esistenti (oggetti, case, foto, storico).
+-- (Generato da scripts/gen-setup-sql.mjs)
+-- ═══════════════════════════════════════════════════════════════\n\n`
+for (const m of upd) agg += `-- ───────── ${m} ─────────\n` + readFileSync(join(root, 'supabase/migrations', m), 'utf8') + '\n'
+agg += "select 'AGGIORNAMENTO COMPLETATO' as esito;\n"
+writeFileSync(join(root, 'supabase/aggiornamento.sql'), agg)
+console.log(`aggiornamento.sql: ${upd.join(', ')}`)
 console.log(`setup_completo.sql: ${migrations.length} migration, ${demoCases.length} case, ${demoItems.length} oggetti`)

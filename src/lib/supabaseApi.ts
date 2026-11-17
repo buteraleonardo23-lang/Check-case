@@ -1,6 +1,6 @@
 import { supabase, usernameToEmail } from './supabase'
 import type { Api } from './api'
-import type { ActivityRow, Case, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
+import type { ActivityRow, Case, Checkout, TrashedItem, Closure, Item, ItemMove, LoadOut, LoadOutInfo, LogRow, Profile, StatusRow } from './types'
 
 const must = <T,>({ data, error }: { data: T; error: { message: string } | null }) => {
   if (error) throw new Error(error.message)
@@ -33,7 +33,7 @@ export const supabaseApi: Api = {
     const [c, i, lo, mv] = await Promise.all([
       supabase.from('cases').select('*').eq('active', true).order('sort_order').order('code'),
       supabase.from('items').select('id, name, aliases, expected_case_id, photo_path, notes').eq('active', true).order('name'),
-      supabase.from('load_outs').select('id, started_at, status').eq('status', 'open').maybeSingle(),
+      supabase.from('load_outs').select('*').eq('status', 'open').maybeSingle(),
       supabase.from('item_moves').select('*, profiles!item_moves_created_by_fkey(display_name)')
         .order('created_at', { ascending: false }).limit(100),
     ])
@@ -53,15 +53,15 @@ export const supabaseApi: Api = {
   },
   subscribe(onChange, onStatus) {
     // un solo canale per tutte le tabelle che cambiano lo stato visto dagli altri telefoni
-    const tables = ['load_outs', 'placements', 'case_closures', 'item_moves', 'load_out_issues', 'cases', 'items']
+    const tables = ['load_outs', 'placements', 'case_closures', 'item_moves', 'load_out_issues', 'item_checkouts', 'cases', 'items']
     let ch = supabase.channel(`checkcase-${Math.random().toString(36).slice(2)}`)
     for (const table of tables) ch = ch.on('postgres_changes', { event: '*', schema: 'public', table }, onChange)
     ch.subscribe(status => onStatus?.(status === 'SUBSCRIBED'))
     return () => { supabase.removeChannel(ch) }
   },
-  async startLoadOut() {
+  async startLoadOut(test = false) {
     const { data: u } = await supabase.auth.getUser()
-    must(await supabase.from('load_outs').insert({ created_by: u.user?.id }))
+    must(await supabase.from('load_outs').insert({ created_by: u.user?.id, ...(test ? { is_test: true } : {}) }))
   },
   async loadOutSummary(id) {
     const r = must(await supabase.rpc('end_load_out', { p_load_out: id, p_confirm: false })) as any
@@ -109,6 +109,33 @@ export const supabaseApi: Api = {
     const { data, error } = await q
     if (error) throw new Error(error.message)
     return (data ?? []) as LogRow[]
+  },
+  async discardTestLoadOut(id) { must(await supabase.rpc('discard_test_load_out', { p_load_out: id })) },
+  async checkouts() {
+    const { data, error } = await supabase.from('item_checkouts')
+      .select('*, profiles!item_checkouts_taken_by_fkey(display_name)')
+      .order('taken_at', { ascending: false }).limit(300)
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((r: any) => ({ ...r, taken_by_name: r.profiles?.display_name ?? null })) as Checkout[]
+  },
+  async checkoutItem(itemId, fromCaseId, eventName) {
+    const r = must(await supabase.rpc('checkout_item', { p_item: itemId, p_from_case: fromCaseId, p_event: eventName })) as any
+    return r.result
+  },
+  async returnCheckouts(ids, note) { must(await supabase.rpc('return_checkouts', { p_ids: ids, p_note: note })) },
+  async setCasePhotos(caseId, photos) {
+    must(await supabase.from('cases').update({ layout_photo_path: photos[0] ?? null, layout_photos: photos.slice(1) }).eq('id', caseId))
+  },
+  async trashItem(itemId) { must(await supabase.rpc('trash_item', { p_item: itemId })) },
+  async restoreItem(itemId) { must(await supabase.rpc('restore_item', { p_item: itemId })) },
+  async deleteItemForever(itemId) { must(await supabase.rpc('delete_item', { p_item: itemId })) },
+  async emptyTrash() { must(await supabase.rpc('empty_trash')) },
+  async trashedItems() {
+    const { data, error } = await supabase.from('items')
+      .select('id, name, aliases, expected_case_id, photo_path, notes, deleted_at, profiles!items_deleted_by_fkey(display_name)')
+      .eq('active', false).order('deleted_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data ?? []).map((r: any) => ({ ...r, deleted_by_name: r.profiles?.display_name ?? null })) as TrashedItem[]
   },
   async loadOuts() {
     const { data } = await supabase.from('load_outs').select('id, started_at, ended_at, status').order('started_at', { ascending: false })

@@ -32,8 +32,10 @@ export async function run() {
   const s = await api.loadOutSummary('lo-demo')
   ok(s.misplaced.length === 2 && s.misplaced.some(m => m.name === 'Scatola rossa' && m.actual_code === '08' && m.by === 'Diego'),
     'riepilogo: 2 nel case sbagliato (Scatola rossa nel 08, messa da Diego)')
-  ok(s.missing.length === s.total - s.placed && s.missing.length === 100 - 58, `riepilogo: ${s.missing.length} non trovati`)
+  ok(s.missing.length === s.total - s.placed - (s.checked_out?.length ?? 0) && s.missing.length === 100 - 58 - 1, `riepilogo: ${s.missing.length} non trovati`)
   ok(s.open_cases.includes('05') && !s.open_cases.includes('01'), 'riepilogo: case aperti elencati')
+  ok(s.checked_out?.length === 1 && s.checked_out[0].name === 'Accordatore' && s.checked_out[0].event === 'Serata in Duomo',
+    'riepilogo: l\'Accordatore è "fuori per Serata in Duomo", non "non trovato"')
   await api.endLoadOut('lo-demo')
   ok((await cat()).loadOut === null, 'smontaggio concluso')
   issues = await api.issues()
@@ -115,6 +117,55 @@ export async function run() {
   await api.resolveIssues(rest.map(i => i.id), 'dismissed', 'prova')
   ok(!(await api.issues()).some(i => i.load_out_id === lo && i.status === 'open'), `"Ignora tutti": ${rest.length} voci chiuse insieme`)
   ok((await api.activityLog(lo)).some(l => l.message === 'Leonardo ha confermato PERSO «Ukulele» — da ricomprare'), 'registro: perso confermato')
+
+  console.log('Smontaggio di prova')
+  const openBefore = (await api.issues()).filter(i => i.status !== 'resolved').length
+  const movesBefore = (await cat()).moves.filter(m => m.status === 'pending').length
+  await api.startLoadOut(true)
+  const t = (await cat()).loadOut!
+  ok(t.is_test === true, 'Leonardo avvia uno smontaggio di PROVA')
+  await as('diego')
+  for (const i of (await cat()).items.slice(0, 30)) await api.place(t.id, i.id, i.expected_case_id!, false)
+  await api.place(t.id, await id('Torcia frontale'), cid('09'), false)
+  ok((await api.issues()).filter(i => i.status !== 'resolved').length === openBefore, 'in prova le voci "da sistemare" non cambiano')
+  ok((await cat()).moves.filter(m => m.status === 'pending').length === movesBefore, 'in prova gli spostamenti decisi restano da fare')
+  ok(await throws(() => api.discardTestLoadOut(t.id)), 'un operatore non può chiudere la prova')
+  await as('leonardo')
+  ok(await throws(() => api.endLoadOut(t.id)), 'una prova non si conclude col riepilogo')
+  await api.discardTestLoadOut(t.id)
+  ok((await cat()).loadOut === null && !(await api.loadOuts()).some(l => l.id === t.id), 'prova chiusa e cancellata')
+  ok(!(await api.activityLog('all')).some(l => l.load_out_id === t.id)
+    && (await api.activityLog('all')).some(l => l.action === 'test_discarded'), 'registro: resta solo "ha fatto uno smontaggio di prova"')
+
+  console.log('Ho un altro evento')
+  await as('diego')
+  ok(await throws(() => api.checkoutItem('i02-5', null, 'Festa')), 'un operatore non può segnare oggetti presi')
+  await as('leonardo')
+  ok(await api.checkoutItem('i02-5', null, 'Festa privata') === 'ok', 'Leonardo prende la Macchina del fumo per «Festa privata»')
+  ok(await api.checkoutItem('i02-5', null, 'Festa privata') === 'already_out', 'non si segna due volte')
+  const outs = (await api.checkouts()).filter(k => !k.returned_at)
+  ok(outs.length === 2 && outs.some(k => k.from_case_id === 'c02'), 'fuori: Accordatore e Macchina del fumo (dal case 02)')
+  await api.returnCheckouts(outs.map(k => k.id), 'evento finito')
+  ok(!(await api.checkouts()).some(k => !k.returned_at), '"Tutto rimesso": rientrati')
+  ok((await api.activityLog('all')).some(l => l.message === 'Leonardo ha rimesso «Macchina del fumo» nel case 02 (evento finito)'), 'registro: rimesso')
+
+  console.log('Cestino')
+  await as('diego')
+  ok(await throws(() => api.trashItem('i03-1')), 'un operatore non può eliminare')
+  await as('leonardo')
+  ok(await throws(() => api.deleteItemForever('i03-1')), '"per sempre" solo per oggetti nel cestino')
+  const hist = (await api.activityLog('all')).length
+  await api.trashItem('i03-1')
+  ok(!(await cat()).items.some(i => i.id === 'i03-1') && (await api.trashedItems()).some(t => t.id === 'i03-1'), 'il Radiomicrofono 1 va nel cestino')
+  ok(!(await api.loadState('lo-demo')).status.some(r => r.item_id === 'i03-1'), 'nel cestino: sparisce dagli smontaggi')
+  await api.restoreItem('i03-1')
+  ok((await cat()).items.find(i => i.id === 'i03-1')?.expected_case_id === 'c03', 'ripristinato nel case 03')
+  ok((await api.loadState('lo-demo')).status.find(r => r.item_id === 'i03-1')?.status === 'green', 'ripristinato con il suo storico (era verde)')
+  ok((await api.activityLog('all')).length === hist + 2, 'registro: cestino + ripristino')
+  await api.trashItem('i03-1'); await api.trashItem('i03-2')
+  await api.emptyTrash()
+  ok(!(await api.trashedItems()).length && !(await cat()).items.some(i => i.id === 'i03-1'), '"Svuota cestino": eliminati per sempre')
+  ok((await api.activityLog('all')).some(l => l.message.startsWith('Leonardo ha eliminato per sempre l\'oggetto «Radiomicrofono archetto 1»')), 'registro: eliminazione definitiva')
 
   console.log(failed ? `\n${failed} TEST FALLITI` : '\nTUTTI I TEST DELLA DEMO SUPERATI')
   return failed

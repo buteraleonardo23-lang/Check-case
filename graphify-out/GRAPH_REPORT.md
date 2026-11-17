@@ -1,17 +1,17 @@
-# Graph Report - Check-case  (2026-11-11)
+# Graph Report - Check-case  (2026-11-17)
 
 ## Corpus Check
-- 49 files · ~65,384 words
+- 58 files · ~80,009 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 3, .example 1, .toml 1)
 
 ## Summary
-- 298 nodes · 718 edges · 10 communities (9 shown, 1 thin omitted)
-- Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 3 edges (avg confidence: 0.95)
+- 335 nodes · 820 edges · 12 communities (10 shown, 2 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 5 edges (avg confidence: 0.93)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c24d8a3b`
+- Built from commit: `f926ad52`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -26,18 +26,19 @@
 - compilerOptions
 - run.sh
 - App.tsx
+- Regole di dominio (il cuore dell'app)
 
 ## God Nodes (most connected - your core abstractions)
-1. `api` - 37 edges
-2. `useLoadOut()` - 25 edges
-3. `react` - 17 edges
-4. `useToast()` - 16 edges
-5. `Check-case — CLAUDE.md` - 16 edges
-6. `CaseDetail()` - 15 edges
-7. `Gate()` - 14 edges
-8. `useAuth()` - 14 edges
-9. `Item` - 14 edges
-10. `Regole di dominio (il cuore dell'app)` - 14 edges
+1. `api` - 48 edges
+2. `useLoadOut()` - 28 edges
+3. `useToast()` - 21 edges
+4. `react` - 19 edges
+5. `Regole di dominio (il cuore dell'app)` - 19 edges
+6. `Check-case — CLAUDE.md` - 16 edges
+7. `Gate()` - 15 edges
+8. `CaseDetail()` - 15 edges
+9. `useAuth()` - 14 edges
+10. `Item` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Stile (brand "Non serve saperlo")` --references--> `useToast()`  [INFERRED]
@@ -54,63 +55,67 @@
 ## Import Cycles
 - None detected.
 
-## Communities (10 total, 1 thin omitted)
+## Communities (12 total, 2 thin omitted)
 
 ### Community 0 - "App.tsx"
-Cohesion: 0.14
-Nodes (37): react, react-router-dom, Modal(), Ring(), Ctx, T, Tone, tones (+29 more)
+Cohesion: 0.12
+Nodes (47): fuse.js, react, react-router-dom, LayoutGallery(), Photo(), Modal(), Ring(), Ctx (+39 more)
 
 ### Community 1 - "api"
-Cohesion: 0.08
-Nodes (31): @supabase/supabase-js, Db, AuthCtx, Ctx, LoadOutCtx, api, isDemo, key (+23 more)
+Cohesion: 0.07
+Nodes (31): @supabase/supabase-js, Db, Ctx, LoadOutCtx, api, isDemo, key, supabase (+23 more)
 
 ### Community 2 - "Check-case — CLAUDE.md"
-Cohesion: 0.05
-Nodes (38): Alias, Architettura (costo zero), Attenzione: limiti del free tier, Check-case — CLAUDE.md, Chiusura case ("Tutto pronto"), Chiusura smontaggio (solo admin), Convenzioni, Cos'è (+30 more)
+Cohesion: 0.07
+Nodes (24): Architettura (costo zero), Attenzione: limiti del free tier, Check-case — CLAUDE.md, Convenzioni, Cos'è, Demo, Mappa del codice (Graphify), Modello dati (Postgres) (+16 more)
 
 ### Community 3 - "demoApi.ts"
-Cohesion: 0.09
-Nodes (39): active(), authListeners, caseCode(), caseLabel(), closureOf(), commit(), DbClosure, DbIssue (+31 more)
+Cohesion: 0.08
+Nodes (43): active(), anyItem(), authListeners, caseCode(), caseLabel(), closureOf(), commit(), DbClosure (+35 more)
 
 ### Community 4 - "package.json"
 Cohesion: 0.05
-Nodes (41): dependencies, fuse.js, react, react-dom, react-router-dom, @supabase/supabase-js, devDependencies, tailwindcss (+33 more)
+Nodes (40): dependencies, fuse.js, react, react-dom, react-router-dom, @supabase/supabase-js, devDependencies, tailwindcss (+32 more)
 
 ### Community 5 - "LogPage.tsx"
-Cohesion: 0.29
-Nodes (9): FixPage(), resolutionText, dot(), Filter, fmtDay(), fmtTime(), LogPage(), copyText() (+1 more)
+Cohesion: 0.39
+Nodes (7): dot(), Filter, fmtDay(), fmtTime(), LogPage(), copyText(), shareOrCopy()
 
 ### Community 6 - "gen-setup-sql.mjs"
-Cohesion: 0.22
-Nodes (3): migrations, src, tmp
+Cohesion: 0.20
+Nodes (4): migrations, src, tmp, upd
 
 ### Community 7 - "compilerOptions"
 Cohesion: 0.14
 Nodes (13): compilerOptions, jsx, lib, module, moduleResolution, noEmit, noUnusedLocals, noUnusedParameters (+5 more)
 
 ### Community 9 - "App.tsx"
-Cohesion: 0.20
-Nodes (14): react-dom, AdminOnly(), App(), Gate(), Balloon(), icons, Layout(), Tab() (+6 more)
+Cohesion: 0.15
+Nodes (17): react-dom, AdminOnly(), App(), Gate(), Balloon(), icons, Layout(), Tab() (+9 more)
+
+### Community 10 - "Regole di dominio (il cuore dell'app)"
+Cohesion: 0.10
+Nodes (19): Aggiornamenti dell'app, Alias, Cestino oggetti (solo admin), Chiusura case ("Tutto pronto"), Chiusura smontaggio (solo admin), Da sistemare (`load_out_issues`), Danni, Foto "come è dentro" (solo admin) (+11 more)
 
 ## Knowledge Gaps
 - **5 isolated node(s):** `@types/node`, `@types/react`, `@types/react-dom`, `tailwindcss`, `typescript`
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 124 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **1 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 140 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **2 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `useToast()` connect `App.tsx` to `Check-case — CLAUDE.md`, `LogPage.tsx`?**
-  _High betweenness centrality (0.186) - this node is a cross-community bridge._
+- **Why does `api` connect `api` to `App.tsx`, `Check-case — CLAUDE.md`, `demoApi.ts`, `LogPage.tsx`, `App.tsx`, `Regole di dominio (il cuore dell'app)`?**
+  _High betweenness centrality (0.224) - this node is a cross-community bridge._
 - **What connects `@types/node`, `@types/react`, `@types/react-dom` to the rest of the system?**
   _5 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `App.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.13945578231292516 - nodes in this community are weakly interconnected._
-- **Why does `Stile (brand "Non serve saperlo")` connect `Check-case — CLAUDE.md` to `App.tsx`?**
-  _High betweenness centrality (0.179) - this node is a cross-community bridge._
+  _Cohesion score 0.11623143881208398 - nodes in this community are weakly interconnected._
+- **Why does `Check-case — CLAUDE.md` connect `Check-case — CLAUDE.md` to `Regole di dominio (il cuore dell'app)`?**
+  _High betweenness centrality (0.138) - this node is a cross-community bridge._
 - **Should `api` be split into smaller, more focused modules?**
-  _Cohesion score 0.07740112994350283 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06628621597892889 - nodes in this community are weakly interconnected._
+- **Why does `useToast()` connect `App.tsx` to `Check-case — CLAUDE.md`, `LogPage.tsx`?**
+  _High betweenness centrality (0.131) - this node is a cross-community bridge._
 - **Should `Check-case — CLAUDE.md` be split into smaller, more focused modules?**
-  _Cohesion score 0.04878048780487805 - nodes in this community are weakly interconnected._
-- **Should `demoApi.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.08585858585858586 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07407407407407407 - nodes in this community are weakly interconnected._

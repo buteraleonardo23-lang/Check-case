@@ -1,26 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import LayoutGallery from '../../components/LayoutGallery'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 import { api } from '../../lib/api'
 import { usePhotoUrl } from '../../lib/photos'
-import type { Case, Item } from '../../lib/types'
+import { shrink } from '../../lib/shrink'
+import { dateOf } from '../../lib/status'
+import type { Case, Item, TrashedItem } from '../../lib/types'
 import { useLoadOut } from '../cases/LoadOutProvider'
 import { useItemSearch } from '../search/useItemSearch'
 
 const swatches = ['#0BB9EA', '#F5C542', '#B583FF', '#FF7A45', '#FF3B6B', '#E23A3A', '#E86BD8', '#4ADE80', '#94A3B8', '#38BDF8']
 
-/** Riduce la foto prima dell'upload (~1600px, JPEG 0.75). */
-async function shrink(file: File): Promise<File> {
-  try {
-    const bmp = await createImageBitmap(file)
-    const s = Math.min(1, 1600 / Math.max(bmp.width, bmp.height))
-    const cv = document.createElement('canvas')
-    cv.width = Math.round(bmp.width * s); cv.height = Math.round(bmp.height * s)
-    cv.getContext('2d')!.drawImage(bmp, 0, 0, cv.width, cv.height)
-    const blob = await new Promise<Blob | null>(r => cv.toBlob(r, 'image/jpeg', 0.75))
-    return blob ? new File([blob], 'foto.jpg', { type: 'image/jpeg' }) : file
-  } catch { return file }
-}
 
 function PhotoInput({ id, label, value, onChange }: { id: string; label: string; value: string | null; onChange: (p: string | null) => void }) {
   const url = usePhotoUrl(value)
@@ -52,8 +43,9 @@ function CaseForm({ c, onClose }: { c: Case | null; onClose: () => void }) {
   const nextCode = String(Math.max(0, ...lo.cases.map(x => parseInt(x.code) || 0)) + 1).padStart(2, '0')
   const [f, setF] = useState({
     code: c?.code ?? nextCode, name: c?.name ?? '', color: c?.color ?? swatches[lo.cases.length % swatches.length],
-    notes: c?.notes ?? '', photo_path: c?.photo_path ?? null, layout_photo_path: c?.layout_photo_path ?? null,
+    notes: c?.notes ?? '', photo_path: c?.photo_path ?? null,
   })
+  // le foto "come è dentro" NON passano da qui: le salva la galleria da sola (così non si sovrascrivono)
   const save = async () => {
     try {
       await api.saveCase({ ...(c ? { id: c.id } : {}), ...f, notes: f.notes || null })
@@ -73,10 +65,10 @@ function CaseForm({ c, onClose }: { c: Case | null; onClose: () => void }) {
         ))}
       </div>
       <textarea id="case-notes" className="field min-h-20" value={f.notes} onChange={e => setF({ ...f, notes: e.target.value })} placeholder="Note per chi lo riempie" />
-      <div className="grid grid-cols-2 gap-2">
-        <PhotoInput id="case-photo" label="Foto case" value={f.photo_path} onChange={p => setF({ ...f, photo_path: p })} />
-        <PhotoInput id="case-layout" label="Come va riempito" value={f.layout_photo_path} onChange={p => setF({ ...f, layout_photo_path: p })} />
-      </div>
+      <PhotoInput id="case-photo" label="Foto del case (copertina)" value={f.photo_path} onChange={p => setF({ ...f, photo_path: p })} />
+      {c
+        ? <div className="-mx-5"><LayoutGallery c={lo.caseById.get(c.id) ?? c} isAdmin onChanged={lo.refresh} /></div>
+        : <p className="text-xs text-muted">Le foto di come va sistemato dentro le aggiungi dopo, dalla scheda del case.</p>}
       <button disabled={!f.code.trim() || !f.name.trim()} onClick={save} className="btn-primary w-full">{c ? 'Salva' : 'Crea case'}</button>
     </Modal>
   )
@@ -92,7 +84,14 @@ function ItemForm({ item, onClose }: { item: Item | null; onClose: () => void })
   const [moveTo, setMoveTo] = useState<string | null>(null)
   const [pending, setPending] = useState(true)
   const [moveNote, setMoveNote] = useState('')
+  const [confirmDel, setConfirmDel] = useState(false)
   const current = item?.expected_case_id ? lo.caseById.get(item.expected_case_id) : null
+
+  const remove = async () => {
+    if (!item) return
+    try { await lo.trashItem(item.id); toast(`«${item.name}» spostato nel cestino`, 'ok'); onClose() }
+    catch (e) { toast((e as Error).message, 'bad') }
+  }
 
   const save = async () => {
     try {
@@ -157,6 +156,17 @@ function ItemForm({ item, onClose }: { item: Item | null; onClose: () => void })
       <button disabled={!f.name.trim() || (!item && !f.expected_case_id)} onClick={save} className="btn-primary w-full">
         {item ? (moveTo ? 'Salva e sposta' : 'Salva') : 'Crea oggetto'}
       </button>
+      {item && (confirmDel ? (
+        <div className="rounded-2xl border border-bad/50 bg-bad/[0.07] p-4 space-y-3">
+          <p className="text-sm">Spostare «{item.name}» nel <b>cestino</b>? Sparisce da case, ricerca e smontaggi. Puoi ripristinarlo quando vuoi dal Catalogo → Cestino, con tutto il suo storico.</p>
+          <div className="flex gap-2">
+            <button onClick={remove} className="btn-bad flex-1 py-2.5">Sposta nel cestino</button>
+            <button onClick={() => setConfirmDel(false)} className="btn-ghost flex-1 py-2.5">Annulla</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setConfirmDel(true)} className="w-full text-sm text-bad/80 underline underline-offset-2 py-1">Elimina (sposta nel cestino)</button>
+      ))}
     </Modal>
   )
 }
@@ -180,9 +190,69 @@ function CaseRow({ c, onEdit }: { c: Case; onEdit: () => void }) {
   )
 }
 
+function TrashTab({ trash }: { trash: TrashedItem[] }) {
+  const lo = useLoadOut()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const [forever, setForever] = useState<string | null>(null)   // id da eliminare per sempre (conferma)
+  const [confirmEmpty, setConfirmEmpty] = useState(false)
+  const run = async (fn: () => Promise<void>, msg: string) => {
+    setBusy(true)
+    try { await fn(); toast(msg, 'ok') } catch (e) { toast((e as Error).message, 'bad') }
+    setBusy(false); setForever(null); setConfirmEmpty(false)
+  }
+  if (!trash.length) return <p className="text-sm text-muted">Il cestino è vuoto. Gli oggetti eliminati finiscono qui e si possono ripristinare.</p>
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">Questi oggetti non compaiono nei case, nella ricerca e negli smontaggi. “Ripristina” li rimette nel loro case con tutto lo storico.</p>
+      {trash.map(t => {
+        const c = t.expected_case_id ? lo.caseById.get(t.expected_case_id) : null
+        return (
+          <div key={t.id} className="rounded-2xl border border-line bg-panel p-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="title text-xl w-9 shrink-0 opacity-70" style={{ color: c?.color ?? undefined }}>{c?.code ?? '—'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold">{t.name}</p>
+                <p className="text-xs text-muted">Va nel case {c?.code ?? '—'}{t.deleted_at && ` · eliminato il ${dateOf(t.deleted_at)}`}{t.deleted_by_name && ` da ${t.deleted_by_name}`}</p>
+              </div>
+            </div>
+            {forever === t.id ? (
+              <div className="rounded-xl border border-bad/50 bg-bad/[0.07] p-3 space-y-2">
+                <p className="text-sm">Eliminare <b>per sempre</b> «{t.name}» e tutto il suo storico? <b>Non si può annullare.</b></p>
+                <div className="flex gap-2">
+                  <button disabled={busy} onClick={() => run(() => lo.deleteItemForever(t.id), `«${t.name}» eliminato per sempre`)} className="btn-bad flex-1 py-2 text-sm">Elimina per sempre</button>
+                  <button onClick={() => setForever(null)} className="btn-ghost flex-1 py-2 text-sm">Annulla</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button disabled={busy} onClick={() => run(() => lo.restoreItem(t.id), `«${t.name}» ripristinato nel case ${c?.code ?? ''}`)} className="btn-primary flex-1 py-2.5 text-sm">Ripristina</button>
+                <button onClick={() => setForever(t.id)} className="btn-ghost px-4 py-2.5 text-sm text-bad">Elimina per sempre</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {confirmEmpty ? (
+        <div className="rounded-2xl border border-bad/50 bg-bad/[0.07] p-4 space-y-3">
+          <p className="text-sm">Svuotare il cestino? I {trash.length} oggetti vengono eliminati <b>per sempre</b>, con tutto il loro storico. <b>Non si può annullare.</b></p>
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={() => run(() => lo.emptyTrash(), 'Cestino svuotato')} className="btn-bad flex-1 py-2.5">Svuota cestino</button>
+            <button onClick={() => setConfirmEmpty(false)} className="btn-ghost flex-1 py-2.5">Annulla</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setConfirmEmpty(true)} className="w-full text-sm text-bad/80 underline underline-offset-2 py-2">Svuota cestino</button>
+      )}
+    </div>
+  )
+}
+
 export default function CatalogPage() {
   const lo = useLoadOut()
-  const [tab, setTab] = useState<'cases' | 'items'>('items')
+  const [tab, setTab] = useState<'cases' | 'items' | 'trash'>('items')
+  const [trash, setTrash] = useState<TrashedItem[]>([])
+  useEffect(() => { api.trashedItems().then(setTrash).catch(() => setTrash([])) }, [lo.version])
   const [editCase, setEditCase] = useState<Case | null | 'new'>(null)
   const [editItem, setEditItem] = useState<Item | null | 'new'>(null)
   const [filter, setFilter] = useState<string | null>(null)
@@ -194,6 +264,7 @@ export default function CatalogPage() {
   const tabs = [
     { k: 'items' as const, t: 'Oggetti', n: lo.items.length },
     { k: 'cases' as const, t: 'Case', n: lo.cases.length },
+    { k: 'trash' as const, t: 'Cestino', n: trash.length },
   ]
 
   return (
@@ -203,7 +274,7 @@ export default function CatalogPage() {
           <p className="eyebrow">Solo admin</p>
           <h1 className="title text-[40px] mt-2">Catalogo</h1>
         </div>
-        {(
+        {tab !== 'trash' && (
           <button onClick={() => tab === 'cases' ? setEditCase('new') : setEditItem('new')} className="btn-primary px-4 py-2.5 text-sm whitespace-nowrap shrink-0">
             + {tab === 'cases' ? 'Case' : 'Oggetto'}
           </button>
@@ -222,6 +293,8 @@ export default function CatalogPage() {
       {tab === 'cases' && (
         <div className="space-y-2">{lo.cases.map(c => <CaseRow key={c.id} c={c} onEdit={() => setEditCase(c)} />)}</div>
       )}
+
+      {tab === 'trash' && <TrashTab trash={trash} />}
 
       {tab === 'items' && (
         <div className="space-y-3">

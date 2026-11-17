@@ -10,3 +10,4 @@ err=$(mktemp)
 "${Q[@]}" -f supabase/setup_completo.sql 2>"$err" || { cat "$err"; exit 1; }
 "${Q[@]}" -f supabase/tests/helpers.sql
 "${Q[@]}" -f supabase/tests/scenario.sql 2>&1 | grep -E "ok  |TEST FALLITO|ERROR|TUTTI" | sed -E "s/^(psql:[^ ]* )?(NOTICE|ERROR):  /  /; s/^ +/  /"
+"${Q[@]}" -f supabase/tests/scenario_0005.sql 2>&1 | grep -E "ok  |TEST FALLITO|ERROR|TUTTI" | sed -E "s/^(psql:[^ ]* )?(NOTICE|ERROR):  /  /; s/^ +/  /"

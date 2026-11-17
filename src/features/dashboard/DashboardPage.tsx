@@ -22,6 +22,13 @@ export default function DashboardPage() {
     try { setSummary(await lo.loadOutSummary()) } catch (e) { toast((e as Error).message, 'bad') }
     setBusy(false)
   }
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const discard = async () => {
+    setBusy(true)
+    try { await lo.discardTest(); setConfirmDiscard(false); toast('Prova chiusa: dati scartati', 'ok'); navigate('/') }
+    catch (e) { toast((e as Error).message, 'bad') }
+    setBusy(false)
+  }
   const confirmEnd = async () => {
     setBusy(true)
     try {
@@ -140,7 +147,19 @@ export default function DashboardPage() {
         </ol>
       </section>
 
-      <button disabled={busy} onClick={askEnd} className="btn-ghost w-full">Concludi smontaggio…</button>
+      {lo.isTest ? (
+        confirmDiscard
+          ? <div className="rounded-2xl border border-accent/50 bg-accent/[0.06] p-4 space-y-3">
+              <p className="text-sm">Chiudere la prova? Tutto quello segnato durante la prova viene <b>cancellato</b>. Catalogo, foto e “Da sistemare” non vengono toccati.</p>
+              <div className="flex gap-2">
+                <button disabled={busy} onClick={discard} className="btn-primary flex-1 py-2.5">Chiudi prova</button>
+                <button onClick={() => setConfirmDiscard(false)} className="btn-ghost flex-1 py-2.5">Annulla</button>
+              </div>
+            </div>
+          : <button onClick={() => setConfirmDiscard(true)} className="btn-primary w-full">Chiudi prova (scarta tutto)</button>
+      ) : (
+        <button disabled={busy} onClick={askEnd} className="btn-ghost w-full">Concludi smontaggio…</button>
+      )}
 
       {summary && (() => {
         const byCase = new Map<string, string[]>()
@@ -167,6 +186,14 @@ export default function DashboardPage() {
                 <p className="eyebrow text-bad">Non trovati (persi o non segnati)</p>
                 {[...byCase.entries()].map(([code, names]) => (
                   <p key={code} className="text-sm"><b className="tabular-nums">Case {code}</b> <span className="text-muted">· {names.length > 6 ? `${names.slice(0, 6).join(', ')} e altri ${names.length - 6}` : names.join(', ')}</span></p>
+                ))}
+              </div>
+            )}
+            {!!summary.checked_out?.length && (
+              <div className="space-y-1.5">
+                <p className="eyebrow text-warn">Fuori per un altro evento (non persi)</p>
+                {summary.checked_out.map(k => (
+                  <p key={k.item_id} className="text-sm"><b>{k.name}</b> <span className="text-muted">· va nel {k.expected_code ?? '—'}{k.event && ` · ${k.event}`}</span></p>
                 ))}
               </div>
             )}

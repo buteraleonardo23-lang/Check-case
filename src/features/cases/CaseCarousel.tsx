@@ -59,6 +59,7 @@ export default function CaseCarousel() {
   const { cases, items, status, closures, loadOut, loading, startLoadOut } = useLoadOut()
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const [confirmTest, setConfirmTest] = useState(false)
   const scroller = useRef<HTMLDivElement>(null)
   const [focus, setFocus] = useState<number[]>([])
 
@@ -93,7 +94,19 @@ export default function CaseCarousel() {
       <p className="eyebrow">Nessuno smontaggio in corso</p>
       <h1 className="title text-4xl">Pronti a<br />smontare?</h1>
       {isAdmin
-        ? <button onClick={() => startLoadOut().catch(e => toast(e.message, 'bad'))} className="btn-primary">Inizia smontaggio</button>
+        ? <div className="flex flex-col items-stretch gap-3 max-w-xs mx-auto pt-2">
+            <button onClick={() => startLoadOut().catch(e => toast(e.message, 'bad'))} className="btn-primary py-4 text-lg">Inizia smontaggio</button>
+            <Link to="/evento" className="btn-ghost">Ho un altro evento</Link>
+            {confirmTest
+              ? <div className="rounded-2xl border border-accent/40 bg-accent/[0.06] p-4 text-left space-y-3">
+                  <p className="text-sm">Uno <b>smontaggio di prova</b> funziona come quello vero, ma quando lo chiudi <b>tutto quello segnato viene cancellato</b>: non tocca catalogo, “Da sistemare” e spostamenti.</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setConfirmTest(false); startLoadOut(true).catch(e => toast(e.message, 'bad')) }} className="btn-primary flex-1 py-2.5 text-sm">Avvia prova</button>
+                    <button onClick={() => setConfirmTest(false)} className="btn-ghost flex-1 py-2.5 text-sm">Annulla</button>
+                  </div>
+                </div>
+              : <button onClick={() => setConfirmTest(true)} className="text-sm text-muted underline underline-offset-2 py-1">Smontaggio di prova</button>}
+          </div>
         : <p className="text-muted">Aspetta che un admin lo avvii.</p>}
     </div>
     </div>

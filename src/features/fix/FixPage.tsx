@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import Modal from '../../components/Modal'
 import { useToast } from '../../components/Toast'
 import { api } from '../../lib/api'
@@ -19,6 +20,7 @@ export default function FixPage() {
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [confirmDismiss, setConfirmDismiss] = useState(false)
   const [manualText, setManualText] = useState<string | null>(null)
+  const [confirmAllOut, setConfirmAllOut] = useState(false)
 
   const missing = lo.openIssues.filter(i => i.kind === 'missing' && i.status === 'open')
   const lost = lo.openIssues.filter(i => i.status === 'lost')
@@ -56,7 +58,13 @@ export default function FixPage() {
       <p className="mt-4 text-muted">Prima esegui la migration 0003 su Supabase (vedi il banner nella schermata Case).</p></div>
   )
 
-  const nothing = !missing.length && !lost.length && !misplaced.length && !pendingMoves.length
+  const out = lo.openCheckouts
+  const nothing = !missing.length && !lost.length && !misplaced.length && !pendingMoves.length && !out.length
+  const giveBack = async (ids: string[], msg: string) => {
+    setBusy(true)
+    try { await lo.returnCheckouts(ids); toast(msg, 'ok'); setConfirmAllOut(false) } catch (e) { toast((e as Error).message, 'bad') }
+    setBusy(false)
+  }
 
   return (
     <div className="px-5 pt-2 space-y-7 pb-8">
@@ -71,6 +79,38 @@ export default function FixPage() {
           <p className="title text-2xl text-ok">Tutto a posto</p>
           <p className="text-sm text-muted mt-1">Nessun oggetto perso o fuori posto.</p>
         </div>
+      )}
+
+      {out.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="eyebrow text-warn">Fuori per un altro evento · {out.length}</h2>
+              <p className="text-xs text-muted mt-1">Da rimettere nel loro case quando l'evento finisce.</p>
+            </div>
+            <Link to="/evento" className="btn-ghost px-4 py-2 text-sm shrink-0">Prendi altro</Link>
+          </div>
+          {out.map(k => {
+            const item = lo.itemById.get(k.item_id)
+            const c = item?.expected_case_id ? lo.caseById.get(item.expected_case_id) : null
+            return (
+              <div key={k.id} className="rounded-2xl border border-warn/40 bg-warn/[0.06] p-4 flex items-center gap-3">
+                <span className="title text-2xl w-10 shrink-0" style={{ color: c?.color ?? undefined }}>{c?.code ?? '—'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold">{item?.name ?? '?'}</p>
+                  <p className="text-xs text-muted">Va nel case {c?.code ?? '—'}{c && ` · ${c.name}`}{k.event_name && ` · ${k.event_name}`}</p>
+                </div>
+                <button disabled={busy} onClick={() => giveBack([k.id], `${item?.name ?? 'Oggetto'}: rimesso nel ${c?.code ?? '—'}`)} className="btn-ghost px-4 py-2 text-sm">Rimesso</button>
+              </div>
+            )
+          })}
+          {confirmAllOut
+            ? <div className="flex gap-2">
+                <button disabled={busy} onClick={() => giveBack(out.map(k => k.id), `${out.length} oggetti rimessi`)} className="btn-primary flex-1 py-2.5 text-sm">Sì, è tutto rimesso</button>
+                <button onClick={() => setConfirmAllOut(false)} className="btn-ghost flex-1 py-2.5 text-sm">Annulla</button>
+              </div>
+            : out.length > 1 && <button onClick={() => setConfirmAllOut(true)} className="text-xs text-muted underline underline-offset-2">Evento finito: è tutto rimesso</button>}
+        </section>
       )}
 
       {missing.length > 0 && (

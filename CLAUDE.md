@@ -69,6 +69,21 @@ Nate alla chiusura: `misplaced` (case sbagliato) e `missing` (non trovato: perso
 - Si chiudono **da sole** allo smontaggio successivo: oggetto messo nel suo case → `fixed`; oggetto non trovato che ricompare → `found`.
 - Le riassegnazioni decise (`item_moves` pending) stanno nella stessa pagina.
 
+### Foto "come è dentro" (solo admin)
+Più foto per case: `layout_photo_path` (la prima) + `layout_photos text[]`. Si aggiungono/tolgono dalla scheda del case (galleria) o dal Catalogo; si salvano con `setCasePhotos` che tocca SOLO le colonne foto (mai nome/numero: altri possono modificarli nello stesso momento).
+
+### Smontaggio di prova (solo admin)
+`load_outs.is_test`. Funziona come quello vero ma non tocca i dati veri (niente risoluzioni automatiche, spostamenti, rientri: i trigger saltano le prove). Banner "PROVA" per tutti. Si chiude con "Chiudi prova" → `discard_test_load_out`: cancella tutto della prova (registro compreso), resta una riga "ha fatto uno smontaggio di prova". Non si conclude col riepilogo.
+
+### Ho un altro evento (solo admin)
+`item_checkouts`: oggetti presi dai case per un evento extra (nome evento facoltativo). Restano "fuori" finché: "Rimesso" / "Tutto rimesso" (`return_checkouts`) oppure vengono messi nel loro case durante uno smontaggio (trigger). Nel riepilogo di fine smontaggio sono "fuori per un evento", NON "non trovati", e non diventano voci "missing". In "Da sistemare" compaiono in arancione con nome + case dove vanno.
+
+### Cestino oggetti (solo admin)
+"Elimina" = cestino (`items.active = false`, `deleted_at`, `deleted_by`): sparisce da case/ricerca/smontaggi, i dati restano, **Ripristina** lo rimette con tutto lo storico. "Elimina per sempre" (`delete_item`) solo per oggetti già nel cestino; "Svuota cestino" (`empty_trash`).
+
+### Aggiornamenti dell'app
+PWA in modalità `prompt`: una versione nuova NON ricarica la pagina da sola (si perderebbero schede non salvate), compare "Nuova versione disponibile · Aggiorna".
+
 ### Danni
 Su ogni oggetto si può segnalare un danno: descrizione + foto opzionale. Il danno resta "aperto" finché un admin non lo segna come risolto.
 
@@ -215,11 +230,13 @@ Grafo del codice in `graphify-out/` (costruito localmente con tree-sitter, nessu
 ## Produzione
 
 - Sito: **https://buteraleonardo23-lang.github.io/Check-case/** (GitHub Pages, workflow `pages.yml` a ogni push sul branch di sviluppo, che è anche il default).
-- Supabase: progetto `gbzrvzgzfrerusklmbjh`, config pubblica in `.env.production`. Le migration nuove le esegue **Leonardo a mano** nello SQL Editor (non abbiamo chiavi admin): dirgli quale file incollare.
+- Supabase: progetto `gbzrvzgzfrerusklmbjh`, config pubblica in `.env.production`. Le migration nuove le esegue **Leonardo a mano** nello SQL Editor (non abbiamo chiavi admin): prima `supabase/backup.sql` (copia di sicurezza in uno schema `backup_…`), poi `supabase/aggiornamento.sql` (tutte le migration dalla 0003, rilanciabile; generato da `npm run gen:setup`).
+- **Regola d'oro: non perdere dati** (il catalogo è lavoro di giorni). Migration solo additive e rilanciabili, testate su copia con dati (stato prima/dopo identico). Prima di pubblicare chiedere a Leonardo: fa fermare chi sta catalogando, poi push.
 - Utenti: `leonardo` (admin), `matteo` (operatore per ora, solo per prova).
 
 ## Stato attuale
 
 - Fatto: schema + RLS + RPC (placement, chiusura con regole, spostamenti), login, carosello case, scheda case con checklist, oggetti extra e promemoria spostamenti, ricerca "Dove va?", dashboard live, catalogo admin (nuovi case/oggetti, foto, alias, spostamenti), **registro attività + Copia per Claude, chiusura smontaggio con riepilogo, Da sistemare (= recap pre-replica)**, demo, test DB + demo, keep-alive, deploy GitHub Pages.
-- Da fare: danni, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case, gestione utenti da app.
+- Fatto anche: foto multiple "come è dentro", smontaggio di prova, "Ho un altro evento", cestino oggetti, aggiornamento app con bottone.
+- Da fare: **sottocase** (oggetti contenitore, in definizione), danni, notifiche push, coda offline, punteggi (criteri da Leonardo), riordino case, gestione utenti da app.
 - Le regole di dominio sono applicate **lato DB nelle RPC**, la UI le riflette soltanto: modificare prima l'SQL.

@@ -2,7 +2,7 @@
 // Replica le stesse regole delle RPC e dei trigger in supabase/migrations (vedi i test in demoApi.test.ts).
 import type { Api } from '../lib/api'
 import type {
-  Case, CloseResult, Closure, IssueAction, Item, ItemMove, ListedItem, LoadOut, LoadOutInfo, LoadOutIssue,
+  Case, Checkout, CloseResult, Closure, IssueAction, Item, ItemMove, ListedItem, LoadOut, LoadOutInfo, LoadOutIssue,
   LoadOutSummary, LogRow, PlaceResult, Profile, StatusRow,
 } from '../lib/types'
 import { demoCases, demoItems, demoUsers } from './demoData'
@@ -14,10 +14,13 @@ interface Db {
   cases: Case[]; items: Item[]; loadOuts: LoadOutInfo[]
   placements: Placement[]; closures: DbClosure[]; moves: (ItemMove & { created_by: string })[]
   issues: DbIssue[]; log: LogRow[]
+  checkouts: (Omit<Checkout, 'taken_by_name'> & { taken_by: string | null })[]
+  trash: (Item & { deleted_at: string; deleted_by: string | null })[]
   userId: string | null
 }
+type DbLoadOut = LoadOutInfo & { is_test?: boolean }
 
-const KEY = 'checkcase-demo-v3'
+const KEY = 'checkcase-demo-v4'
 const uid = () => Math.random().toString(36).slice(2, 10)
 const now = () => new Date().toISOString()
 const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString()
@@ -32,8 +35,11 @@ const userName = (id: string | null) => demoUsers.find(u => u.id === id)?.displa
 const caseCode = (id: string | null) => db.cases.find(c => c.id === id)?.code ?? '?'
 const caseLabel = (id: string | null) => id ? `case ${caseCode(id)}` : 'nessun case'
 const itemOf = (id: string) => db.items.find(i => i.id === id)
-const itemLabel = (id: string) => `«${itemOf(id)?.name ?? '?'}»`
-const openLo = () => db.loadOuts.find(l => l.status === 'open') ?? null
+const anyItem = (id: string) => itemOf(id) ?? db.trash.find(i => i.id === id)
+const itemLabel = (id: string) => `«${anyItem(id)?.name ?? '?'}»`
+const openLo = () => (db.loadOuts as DbLoadOut[]).find(l => l.status === 'open') ?? null
+const isTest = (loId: string) => !!(db.loadOuts as DbLoadOut[]).find(l => l.id === loId)?.is_test
+const isOut = (itemId: string) => db.checkouts.some(k => k.item_id === itemId && !k.returned_at)
 const active = (loId: string, itemId: string) => db.placements.find(p => p.load_out_id === loId && p.item_id === itemId && !p.removed_at)
 const closureOf = (loId: string, caseId: string) => db.closures.find(c => c.load_out_id === loId && c.case_id === caseId && !c.reopened_at)
 const requireAdmin = (msg = 'Solo Matteo e Leonardo possono farlo') => { if (me()?.role !== 'admin') throw new Error(msg) }
@@ -63,8 +69,12 @@ function summary(loId: string): LoadOutSummary {
       item_id: r.item_id, name: r.item_name, expected_code: r.expected_case_id ? caseCode(r.expected_case_id) : null,
       actual_code: caseCode(r.actual_case_id), by: r.placed_by_name, at: r.placed_at,
     })),
-    missing: rows.filter(r => r.status === 'red').map(r => ({
+    missing: rows.filter(r => r.status === 'red' && !isOut(r.item_id)).map(r => ({
       item_id: r.item_id, name: r.item_name, expected_code: r.expected_case_id ? caseCode(r.expected_case_id) : null,
+    })),
+    checked_out: rows.filter(r => r.status === 'red' && isOut(r.item_id)).map(r => ({
+      item_id: r.item_id, name: r.item_name, expected_code: r.expected_case_id ? caseCode(r.expected_case_id) : null,
+      event: db.checkouts.find(k => k.item_id === r.item_id && !k.returned_at)?.event_name ?? null,
     })),
     open_cases: [...db.cases].sort((a, b) => a.sort_order - b.sort_order).filter(c => !closureOf(loId, c.id)).map(c => c.code),
     placed: rows.filter(r => r.status !== 'red').length,
@@ -77,6 +87,10 @@ function placeRaw(loId: string, itemId: string, caseId: string, by: string, at =
   const exp = itemOf(itemId)?.expected_case_id ?? null
   log(exp === caseId ? 'placed' : 'placed_elsewhere', by,
     `ha messo ${itemLabel(itemId)} nel ${caseLabel(caseId)}${exp !== caseId ? ` (dovrebbe stare nel ${caseLabel(exp)})` : ''}`, loId, at)
+  if (isTest(loId)) return   // una prova non tocca i dati veri
+  // oggetto preso per un evento e rimesso nel suo case: rientrato
+  for (const k of db.checkouts) if (k.item_id === itemId && !k.returned_at && caseId === exp)
+    Object.assign(k, { returned_at: at, returned_by: by })
   // spostamenti decisi completati
   for (const m of db.moves) if (m.item_id === itemId && m.status === 'pending' && m.to_case_id === caseId) {
     m.status = 'done'
@@ -106,7 +120,7 @@ function moveItemRaw(itemId: string, toCaseId: string, pending: boolean, note: s
 function seed(): Db {
   db = {
     cases: demoCases.map(c => ({ ...c })), items: demoItems.map(i => ({ ...i })),
-    loadOuts: [], placements: [], closures: [], moves: [], issues: [], log: [], userId: null,
+    loadOuts: [], placements: [], closures: [], moves: [], issues: [], log: [], checkouts: [], trash: [], userId: null,
   }
   logSeq = 1
   // smontaggio precedente (4 giorni fa), già concluso: ha lasciato qualcosa da sistemare
@@ -127,6 +141,10 @@ function seed(): Db {
   db.userId = 'u-leonardo'
   moveItemRaw('i10-3', 'c09', true, 'Sta meglio con i cavi')
   db.moves[db.moves.length - 1].created_at = minsAgo(60 * 24 * 3)
+  // l'accordatore è stato preso per un altro evento due giorni fa
+  db.checkouts.push({ id: uid(), item_id: 'i04-9', from_case_id: 'c04', event_name: 'Serata in Duomo', taken_by: 'u-leonardo',
+    taken_at: minsAgo(60 * 24 * 2), returned_at: null })
+  log('item_checked_out', 'u-leonardo', 'ha preso «Accordatore» dal case 04 per «Serata in Duomo»', null, minsAgo(60 * 24 * 2))
   db.userId = null
 
   // smontaggio in corso
@@ -216,7 +234,7 @@ export const demoApi: Api = {
     return {
       cases: [...db.cases].sort((a, b) => a.sort_order - b.sort_order),
       items: [...db.items].sort((a, b) => a.name.localeCompare(b.name, 'it')),
-      loadOut: lo ? { id: lo.id, started_at: lo.started_at, status: 'open' } as LoadOut : null,
+      loadOut: lo ? { id: lo.id, started_at: lo.started_at, status: 'open', is_test: !!lo.is_test } as LoadOut : null,
       moves: [...db.moves].sort((a, b) => b.created_at.localeCompare(a.created_at)),
     }
   },
@@ -224,13 +242,94 @@ export const demoApi: Api = {
     return { status: statusRows(loId), closures: db.closures.filter(c => c.load_out_id === loId && !c.reopened_at) }
   },
   subscribe(cb, onStatus) { listeners.add(cb); onStatus?.(true); return () => { listeners.delete(cb) } },
-  async startLoadOut() {
+  async startLoadOut(test = false) {
     requireAdmin('Solo un admin può iniziare lo smontaggio')
     if (openLo()) throw new Error('C\'è già uno smontaggio in corso')
-    const lo: LoadOutInfo = { id: uid(), started_at: now(), ended_at: null, status: 'open' }
+    const lo: DbLoadOut = { id: uid(), started_at: now(), ended_at: null, status: 'open', is_test: test }
     db.loadOuts.push(lo)
-    log('load_out_started', db.userId, 'ha iniziato lo smontaggio', lo.id)
+    log('load_out_started', db.userId, test ? 'ha iniziato uno smontaggio di PROVA' : 'ha iniziato lo smontaggio', lo.id)
     commit()
+  },
+  async discardTestLoadOut(loId) {
+    requireAdmin('Solo un admin può chiudere la prova')
+    const lo = (db.loadOuts as DbLoadOut[]).find(l => l.id === loId && l.is_test)
+    if (!lo) throw new Error('Non è uno smontaggio di prova')
+    db.loadOuts = db.loadOuts.filter(l => l.id !== loId)
+    db.placements = db.placements.filter(p => p.load_out_id !== loId)
+    db.closures = db.closures.filter(c => c.load_out_id !== loId)
+    db.issues = db.issues.filter(i => i.load_out_id !== loId)
+    db.log = db.log.filter(l => l.load_out_id !== loId)
+    log('test_discarded', db.userId, `ha fatto uno smontaggio di prova (iniziato alle ${new Date(lo.started_at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}, dati scartati)`)
+    commit()
+  },
+  async checkouts() {
+    return db.checkouts.map(k => ({ ...k, taken_by_name: k.taken_by ? userName(k.taken_by) : null }))
+      .sort((a, b) => b.taken_at.localeCompare(a.taken_at))
+  },
+  async checkoutItem(itemId, fromCaseId, eventName) {
+    requireAdmin('Solo un admin può segnare gli oggetti presi per un evento')
+    if (isOut(itemId)) return 'already_out'
+    const from = fromCaseId ?? itemOf(itemId)?.expected_case_id ?? null
+    const ev = eventName?.trim() || null
+    db.checkouts.push({ id: uid(), item_id: itemId, from_case_id: from, event_name: ev, taken_by: db.userId, taken_at: now(), returned_at: null })
+    log('item_checked_out', db.userId, `ha preso ${itemLabel(itemId)} dal ${caseLabel(from)}${ev ? ` per «${ev}»` : ' per un altro evento'}`)
+    commit()
+    return 'ok'
+  },
+  async returnCheckouts(ids, note) {
+    requireAdmin('Solo un admin può farlo')
+    for (const k of db.checkouts) if (ids.includes(k.id) && !k.returned_at) {
+      k.returned_at = now()
+      log('item_returned', db.userId, `ha rimesso ${itemLabel(k.item_id)} nel ${caseLabel(itemOf(k.item_id)?.expected_case_id ?? null)}${note ? ` (${note})` : ''}`)
+    }
+    commit()
+  },
+  async setCasePhotos(caseId, photos) {
+    requireAdmin()
+    const c = db.cases.find(x => x.id === caseId)
+    if (!c) throw new Error('Case non trovato')
+    c.layout_photo_path = photos[0] ?? null
+    c.layout_photos = photos.slice(1)
+    log('case_updated', db.userId, `ha aggiornato le foto del case ${c.code} «${c.name}»`)
+    commit()
+  },
+  async trashItem(itemId) {
+    requireAdmin('Solo un admin può eliminare oggetti')
+    const it = itemOf(itemId)
+    if (!it) throw new Error('Oggetto non trovato o già nel cestino')
+    log('item_trashed', db.userId, `ha spostato nel cestino ${itemLabel(itemId)} (era nel ${caseLabel(it.expected_case_id)})`)
+    db.items = db.items.filter(i => i.id !== itemId)
+    db.trash.push({ ...it, deleted_at: now(), deleted_by: db.userId })
+    commit()
+  },
+  async restoreItem(itemId) {
+    requireAdmin('Solo un admin può ripristinare oggetti')
+    const t = db.trash.find(i => i.id === itemId)
+    if (!t) throw new Error('Oggetto non trovato nel cestino')
+    const { deleted_at: _a, deleted_by: _b, ...it } = t
+    db.trash = db.trash.filter(i => i.id !== itemId)
+    db.items.push(it)
+    log('item_restored', db.userId, `ha ripristinato ${itemLabel(itemId)} nel ${caseLabel(it.expected_case_id)}`)
+    commit()
+  },
+  async deleteItemForever(itemId) {
+    requireAdmin('Solo un admin può eliminare oggetti')
+    const t = db.trash.find(i => i.id === itemId)
+    if (!t) throw new Error('Si possono eliminare per sempre solo gli oggetti nel cestino')
+    log('item_deleted', db.userId, `ha eliminato per sempre l'oggetto «${t.name}» (era nel ${caseLabel(t.expected_case_id)})`)
+    db.trash = db.trash.filter(i => i.id !== itemId)
+    db.placements = db.placements.filter(p => p.item_id !== itemId)
+    db.issues = db.issues.filter(i => i.item_id !== itemId)
+    db.moves = db.moves.filter(m => m.item_id !== itemId)
+    db.checkouts = db.checkouts.filter(k => k.item_id !== itemId)
+    commit()
+  },
+  async emptyTrash() {
+    requireAdmin('Solo un admin può svuotare il cestino')
+    for (const t of [...db.trash]) await demoApi.deleteItemForever(t.id)
+  },
+  async trashedItems() {
+    return db.trash.map(t => ({ ...t, deleted_by_name: t.deleted_by ? userName(t.deleted_by) : null }))
   },
   async loadOutSummary(loId) {
     requireAdmin('Solo un admin può concludere lo smontaggio')
@@ -238,18 +337,19 @@ export const demoApi: Api = {
   },
   async endLoadOut(loId) {
     requireAdmin('Solo un admin può concludere lo smontaggio')
+    if (isTest(loId)) throw new Error('È uno smontaggio di prova: usa "Chiudi prova"')
     const lo = db.loadOuts.find(l => l.id === loId)
     if (!lo || lo.status !== 'open') throw new Error('Lo smontaggio è già concluso')
     const s = summary(loId)
     lo.status = 'closed'; lo.ended_at = now()
     log('load_out_ended', db.userId, 'ha concluso lo smontaggio', loId)
-    for (const r of statusRows(loId).filter(r => r.status !== 'green')) {
+    for (const r of statusRows(loId).filter(r => r.status === 'orange' || (r.status === 'red' && !isOut(r.item_id)))) {
       if (db.issues.some(i => i.load_out_id === loId && i.item_id === r.item_id)) continue
       db.issues.push({ id: uid(), load_out_id: loId, item_id: r.item_id, kind: r.status === 'orange' ? 'misplaced' : 'missing',
         expected_case_id: r.expected_case_id, actual_case_id: r.actual_case_id, placed_by: r.placed_by,
         status: 'open', resolution: null, note: null, created_at: lo.ended_at, resolved_at: null })
     }
-    log('load_out_summary', db.userId, `ha confermato il riepilogo: ${s.misplaced.length} nel case sbagliato, ${s.missing.length} non trovati`, loId)
+    log('load_out_summary', db.userId, `ha confermato il riepilogo: ${s.misplaced.length} nel case sbagliato, ${s.missing.length} non trovati${s.checked_out?.length ? `, ${s.checked_out.length} fuori per un altro evento` : ''}`, loId)
     commit()
     return s
   },

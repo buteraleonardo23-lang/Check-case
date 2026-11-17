@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import LayoutGallery from '../../components/LayoutGallery'
 import Modal from '../../components/Modal'
 import Ring from '../../components/Ring'
 import { useToast } from '../../components/Toast'
@@ -14,7 +15,6 @@ type Dialog =
   | { kind: 'move'; item: Item; fromCode: string; by: string }
   | { kind: 'close'; res: CloseResult }
   | { kind: 'add' }
-  | { kind: 'photo' }
 
 const listText = (l: ListedItem[]) => l.map(i => i.case_code ? `${i.name} → case ${i.case_code}${i.by ? ` (${i.by})` : ''}` : i.name)
 
@@ -60,7 +60,6 @@ export default function CaseDetail() {
   const [query, setQuery] = useState('')
   const [note, setNote] = useState('')
   const c = id ? lo.caseById.get(id) : undefined
-  const layout = usePhotoUrl(c?.layout_photo_path)
   const addResults = useItemSearch(lo.items, query)
 
   if (!c) return <p className="p-6">Case non trovato. <Link to="/" className="text-accent underline">Torna ai case</Link></p>
@@ -118,13 +117,7 @@ export default function CaseDetail() {
         </div>
       </header>
 
-      {layout && (
-        <button onClick={() => setDialog({ kind: 'photo' })} className="relative block w-full group">
-          <img src={layout} alt="Come va riempito il case" className="w-full h-56 object-cover" />
-          <span className="absolute inset-0 bg-gradient-to-t from-ink via-transparent" />
-          <span className="absolute left-5 bottom-3 eyebrow text-fog">◎ Foto di riferimento · tocca per ingrandire</span>
-        </button>
-      )}
+      <div className="mt-4"><LayoutGallery c={c} isAdmin={isAdmin} onChanged={lo.refresh} /></div>
 
       <div className="px-5 space-y-3 mt-4">
         {c.notes && <p className="rounded-2xl bg-panel border border-line p-3.5 text-sm text-fog/90">{c.notes}</p>}
@@ -173,11 +166,6 @@ export default function CaseDetail() {
         </div>
       )}
 
-      {dialog?.kind === 'photo' && layout && (
-        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center" onClick={() => setDialog(null)}>
-          <img src={layout} alt="" className="max-w-full max-h-full object-contain" />
-        </div>
-      )}
 
       {dialog?.kind === 'move' && (
         <Modal eyebrow="Attenzione" title="È già in un altro case" onClose={() => setDialog(null)}>

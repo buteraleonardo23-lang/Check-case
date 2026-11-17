@@ -26,8 +26,8 @@ function Tab({ to, icon, label, badge }: { to: string; icon: keyof typeof icons;
 
 export default function Layout() {
   const { isAdmin, profile, signOut } = useAuth()
-  const { openIssues, moves } = useLoadOut()
-  const toFix = openIssues.length + moves.filter(m => m.status === 'pending').length
+  const { openIssues, moves, openCheckouts, isTest } = useLoadOut()
+  const toFix = openIssues.length + moves.filter(m => m.status === 'pending').length + openCheckouts.length
   return (
     <div className="min-h-svh pb-[calc(env(safe-area-inset-bottom,0px)+80px)]">
       <div className="flex items-center gap-3 px-5 overflow-hidden pt-[calc(env(safe-area-inset-top,0px)+12px)] pb-2">
@@ -40,6 +40,12 @@ export default function Layout() {
         {api.demo && <button onClick={resetDemo} className="text-xs text-muted">Reset</button>}
         <button onClick={signOut} className="text-xs text-muted">{api.demo ? 'Cambia' : 'Esci'}</button>
       </div>
+      {isTest && (
+        <div className="mx-5 mb-3 rounded-2xl border border-accent/50 bg-accent/10 px-4 py-2.5 flex items-center gap-3">
+          <span className="chip bg-accent text-ink font-bold shrink-0">PROVA</span>
+          <span className="text-xs flex-1">Smontaggio di prova: quello che segnate <b>non resta salvato</b>.{isAdmin && ' Lo chiudi dalla Dashboard.'}</span>
+        </div>
+      )}
       <Outlet />
       <nav className="fixed bottom-0 inset-x-0 z-20 glass border-x-0 border-b-0 flex px-2 pb-[env(safe-area-inset-bottom,0px)]">
         <Tab to="/" icon="cases" label="Case" />

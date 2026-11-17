@@ -5,12 +5,14 @@ export interface Profile { id: string; username: string; display_name: string; r
 export interface Case {
   id: string; code: string; name: string; color: string | null
   photo_path: string | null; layout_photo_path: string | null; notes: string | null; sort_order: number
+  /** foto aggiuntive "come è dentro" (la prima resta layout_photo_path) */
+  layout_photos?: string[]
 }
 export interface Item {
   id: string; name: string; aliases: string[]; expected_case_id: string | null
   photo_path: string | null; notes: string | null
 }
-export interface LoadOut { id: string; started_at: string; status: 'open' | 'closed' }
+export interface LoadOut { id: string; started_at: string; status: 'open' | 'closed'; is_test?: boolean }
 export interface StatusRow {
   item_id: string; item_name: string; aliases: string[]
   expected_case_id: string | null; actual_case_id: string | null
@@ -42,6 +44,8 @@ export type CloseResult =
 export interface LoadOutSummary {
   misplaced: { item_id: string; name: string; expected_code: string | null; actual_code: string; by: string | null; at: string | null }[]
   missing: { item_id: string; name: string; expected_code: string | null }[]
+  /** non trovati ma presi per un altro evento: non sono persi */
+  checked_out?: { item_id: string; name: string; expected_code: string | null; event: string | null }[]
   open_cases: string[]
   placed: number
   total: number
@@ -59,3 +63,16 @@ export interface LoadOutIssue {
 
 export interface LogRow { id: number; at: string; actor_name: string | null; action: string; message: string; load_out_id: string | null }
 export interface LoadOutInfo { id: string; started_at: string; ended_at: string | null; status: 'open' | 'closed' }
+
+/** Oggetto preso dai case per un altro evento ("Ho un altro evento"): fuori finché non viene rimesso. */
+export interface Checkout {
+  id: string; item_id: string; from_case_id: string | null; event_name: string | null
+  taken_by_name: string | null; taken_at: string; returned_at: string | null
+}
+
+/** Oggetto nel cestino: sparito da case e smontaggi, ma recuperabile. */
+export type TrashedItem = Item & { deleted_at: string | null; deleted_by_name: string | null }
+
+/** Tutte le foto "come è dentro" di un case, in ordine. */
+export const layoutPhotos = (c: { layout_photo_path: string | null; layout_photos?: string[] }) =>
+  [c.layout_photo_path, ...(c.layout_photos ?? [])].filter((p, i, a): p is string => !!p && a.indexOf(p) === i)

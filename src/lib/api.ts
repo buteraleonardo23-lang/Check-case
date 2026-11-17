@@ -1,5 +1,5 @@
 import type {
-  ActivityRow, Case, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
+  ActivityRow, Case, Checkout, TrashedItem, Closure, CloseResult, IssueAction, Item, ItemMove, LoadOut, LoadOutInfo, LoadOutIssue,
   LoadOutSummary, LogRow, PlaceResult, Profile, StatusRow,
 } from './types'
 
@@ -21,7 +21,10 @@ export interface Api {
   /** Ascolta SEMPRE le modifiche dei colleghi (anche senza smontaggio in corso).
    *  onStatus(true/false) dice se la connessione in tempo reale è attiva. */
   subscribe(onChange: () => void, onStatus?: (live: boolean) => void): () => void
-  startLoadOut(): Promise<void>
+  /** test=true: smontaggio di PROVA (si scarta alla fine, non tocca i dati veri) */
+  startLoadOut(test?: boolean): Promise<void>
+  /** Chiude la prova e cancella tutto quello segnato durante la prova. */
+  discardTestLoadOut(loadOutId: string): Promise<void>
   /** Riepilogo prima di concludere (oggetti nel case sbagliato, non trovati, case aperti). */
   loadOutSummary(loadOutId: string): Promise<LoadOutSummary>
   /** Conclude lo smontaggio (solo admin) e crea le voci "da sistemare". */
@@ -36,7 +39,19 @@ export interface Api {
   resolveIssues(issueIds: string[], action: IssueAction, note: string | null): Promise<void>
   activityLog(loadOutId: string | null | 'all', limit?: number): Promise<LogRow[]>
   loadOuts(): Promise<LoadOutInfo[]>
+  // "Ho un altro evento" (solo admin)
+  checkouts(): Promise<Checkout[]>
+  checkoutItem(itemId: string, fromCaseId: string | null, eventName: string | null): Promise<'ok' | 'already_out'>
+  returnCheckouts(ids: string[], note: string | null): Promise<void>
   // catalogo (solo admin)
+  /** Cestino: "elimina" sposta qui, si può ripristinare. Solo "per sempre" cancella davvero. */
+  trashItem(itemId: string): Promise<void>
+  restoreItem(itemId: string): Promise<void>
+  deleteItemForever(itemId: string): Promise<void>
+  emptyTrash(): Promise<void>
+  trashedItems(): Promise<TrashedItem[]>
+  /** Aggiorna SOLO le foto "come è dentro" (non tocca nome/numero: altri possono modificarli nello stesso momento). */
+  setCasePhotos(caseId: string, photos: string[]): Promise<void>
   saveCase(c: Partial<Case> & { code: string; name: string }): Promise<void>
   saveItem(i: Partial<Item> & { name: string }): Promise<void>
   moveItem(itemId: string, toCaseId: string, pending: boolean, note: string | null): Promise<void>

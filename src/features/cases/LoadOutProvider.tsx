@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '../../lib/api'
-import type { Case, CloseResult, Closure, IssueAction, Item, ItemMove, LoadOut, LoadOutIssue, LoadOutSummary, PlaceResult, StatusRow } from '../../lib/types'
+import type { Case, Checkout, CloseResult, Closure, IssueAction, Item, ItemMove, LoadOut, LoadOutIssue, LoadOutSummary, PlaceResult, StatusRow } from '../../lib/types'
 
 interface LoadOutCtx {
   loading: boolean
@@ -15,9 +15,19 @@ interface LoadOutCtx {
   issues: LoadOutIssue[]                // voci "da sistemare" (tutte, anche risolte)
   openIssues: LoadOutIssue[]            // solo quelle ancora da gestire (open + lost)
   dbOutdated: boolean                   // il database non ha ancora la migration 0003
+  checkouts: Checkout[]                 // oggetti presi per altri eventi (anche rientrati)
+  openCheckouts: Checkout[]             // ancora fuori
+  isTest: boolean                       // smontaggio in corso = PROVA
   version: number                       // cresce a ogni modifica (per ricaricare feed ecc.)
   refresh: () => Promise<void>
-  startLoadOut: () => Promise<void>
+  startLoadOut: (test?: boolean) => Promise<void>
+  discardTest: () => Promise<void>
+  checkoutItem: (itemId: string, fromCaseId: string | null, eventName: string | null) => Promise<'ok' | 'already_out'>
+  returnCheckouts: (ids: string[], note?: string | null) => Promise<void>
+  trashItem: (itemId: string) => Promise<void>
+  restoreItem: (itemId: string) => Promise<void>
+  deleteItemForever: (itemId: string) => Promise<void>
+  emptyTrash: () => Promise<void>
   loadOutSummary: () => Promise<LoadOutSummary>
   endLoadOut: () => Promise<LoadOutSummary>
   resolveIssues: (ids: string[], action: IssueAction, note?: string | null) => Promise<void>
@@ -39,6 +49,7 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
   const [closureRows, setClosureRows] = useState<Closure[]>([])
   const [issues, setIssues] = useState<LoadOutIssue[]>([])
   const [dbOutdated, setDbOutdated] = useState(false)
+  const [checkouts, setCheckouts] = useState<Checkout[]>([])
   const [version, setVersion] = useState(0)
   const loRef = useRef<LoadOut | null>(null)
 
@@ -52,6 +63,7 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
     } else { setStatusRows([]); setClosureRows([]) }
     try { setIssues(await api.issues()); setDbOutdated(false) }
     catch { setIssues([]); setDbOutdated(true) }   // migration 0003 non ancora eseguita
+    try { setCheckouts(await api.checkouts()) } catch { setCheckouts([]) }   // migration 0005 non ancora eseguita
     setVersion(v => v + 1)
     setLoading(false)
   }, [])
@@ -89,15 +101,29 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
     return loRef.current.id
   }
 
+  const activeIds = useMemo(() => new Set(items.map(i => i.id)), [items])
   const value = useMemo<LoadOutCtx>(() => ({
-    loading, loadOut, cases, items, moves, version, issues, dbOutdated,
-    openIssues: issues.filter(i => i.status !== 'resolved'),
+    loading, loadOut, cases, items, version, dbOutdated,
+    // gli oggetti nel cestino non compaiono da nessuna parte (i loro dati restano, tornano se ripristinati)
+    moves: moves.filter(m => activeIds.has(m.item_id)),
+    issues: issues.filter(i => activeIds.has(i.item_id)),
+    openIssues: issues.filter(i => i.status !== 'resolved' && activeIds.has(i.item_id)),
+    checkouts: checkouts.filter(k => activeIds.has(k.item_id)),
+    openCheckouts: checkouts.filter(k => !k.returned_at && activeIds.has(k.item_id)),
+    isTest: !!loadOut?.is_test,
     status: new Map(statusRows.map(r => [r.item_id, r])),
     closures: new Map(closureRows.map(r => [r.case_id, r])),
     caseById: new Map(cases.map(c => [c.id, c])),
     itemById: new Map(items.map(i => [i.id, i])),
     refresh,
-    startLoadOut: () => after(api.startLoadOut()),
+    startLoadOut: (test = false) => after(api.startLoadOut(test)),
+    discardTest: () => after(api.discardTestLoadOut(loId())),
+    checkoutItem: (itemId, fromCaseId, eventName) => after(api.checkoutItem(itemId, fromCaseId, eventName)),
+    returnCheckouts: (ids, note = null) => after(api.returnCheckouts(ids, note)),
+    trashItem: (itemId) => after(api.trashItem(itemId)),
+    restoreItem: (itemId) => after(api.restoreItem(itemId)),
+    deleteItemForever: (itemId) => after(api.deleteItemForever(itemId)),
+    emptyTrash: () => after(api.emptyTrash()),
     loadOutSummary: () => api.loadOutSummary(loId()),
     endLoadOut: () => after(api.endLoadOut(loId())),
     resolveIssues: (ids, action, note = null) => after(api.resolveIssues(ids, action, note)),
@@ -105,7 +131,7 @@ export function LoadOutProvider({ children }: { children: ReactNode }) {
     unplace: (itemId) => after(api.unplace(loId(), itemId)),
     closeCase: (caseId, o = {}) => after(api.closeCase(loId(), caseId, o)),
     reopenCase: (caseId) => after(api.reopenCase(loId(), caseId)),
-  }), [loading, loadOut, cases, items, moves, version, issues, dbOutdated, statusRows, closureRows, refresh])
+  }), [loading, loadOut, cases, items, activeIds, moves, version, issues, dbOutdated, checkouts, statusRows, closureRows, refresh])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
